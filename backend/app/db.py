@@ -22,14 +22,20 @@ def _pk(question_id: str) -> str:
     return f"Q#{question_id}"
 
 
+def _plain(v):
+    """DynamoDB returns numbers as Decimal, also inside maps and lists."""
+    if isinstance(v, Decimal):
+        return int(v) if v == v.to_integral_value() else float(v)
+    if isinstance(v, dict):
+        return {k: _plain(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_plain(x) for x in v]
+    return v
+
+
 def _clean(item: dict) -> dict:
-    """Turn DynamoDB Decimals back into ints and drop the internal pk."""
-    out = {}
-    for k, v in item.items():
-        if k == "pk":
-            continue
-        out[k] = int(v) if isinstance(v, Decimal) else v
-    return out
+    """Plain Python values, without the internal pk."""
+    return {k: _plain(v) for k, v in item.items() if k != "pk"}
 
 
 def list_questions() -> list[dict]:
@@ -72,6 +78,19 @@ def record_practice(question_id: str, confidence: int, when: str) -> dict | None
     except table().meta.client.exceptions.ConditionalCheckFailedException:
         return None
     return _clean(resp["Attributes"])
+
+
+def save_feedback(question_id: str, entries: list[dict]) -> None:
+    """Store the AI review history on a question (only if it still exists)."""
+    try:
+        table().update_item(
+            Key={"pk": _pk(question_id)},
+            UpdateExpression="SET aiFeedback = :f",
+            ConditionExpression="attribute_exists(pk)",
+            ExpressionAttributeValues={":f": entries},
+        )
+    except table().meta.client.exceptions.ConditionalCheckFailedException:
+        pass  # deleted while the model was thinking, nothing to save
 
 
 def delete_question(question_id: str) -> bool:

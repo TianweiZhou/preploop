@@ -1,4 +1,8 @@
-"""Practice mode: pick the next question (weighted) and save ratings."""
+"""Practice mode: pick the next question (weighted) and save ratings.
+
+A practice session goes through each matching question once. The browser
+sends the ids it has already seen, so the server stays stateless.
+"""
 
 import random
 from datetime import datetime, timezone
@@ -7,7 +11,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app import db
-from app.models import Question, QuestionType
+from app.feedback import public
+from app.models import QuestionOut, QuestionType
 from app.routes.questions import matches
 
 router = APIRouter(prefix="/api/practice", tags=["practice"])
@@ -31,30 +36,40 @@ def weight(q: dict, now: datetime) -> float:
     return confidence_part * recency_part
 
 
-def pick(questions: list[dict], now: datetime, exclude: str | None = None, rng=random) -> dict | None:
-    # Avoid showing the same question twice in a row, unless it's the only one.
-    pool = [q for q in questions if q["id"] != exclude] or questions
-    if not pool:
+def pick(questions: list[dict], now: datetime, rng=random) -> dict | None:
+    if not questions:
         return None
-    return rng.choices(pool, weights=[weight(q, now) for q in pool], k=1)[0]
+    return rng.choices(questions, weights=[weight(q, now) for q in questions], k=1)[0]
 
 
-@router.get("/next", response_model=Question)
-def next_question(type: QuestionType | None = None, tag: str | None = None, exclude: str | None = None):
-    candidates = [q for q in db.list_questions() if matches(q, type, tag, None, None, None)]
-    q = pick(candidates, datetime.now(timezone.utc), exclude)
-    if not q:
-        raise HTTPException(404, "No questions match this filter")
-    return q
+class NextRequest(BaseModel):
+    type: QuestionType | None = None
+    tag: str | None = Field(None, max_length=40)
+    seen: list[str] = Field(default_factory=list, max_length=5000)  # ids already shown this session
+
+
+class NextResponse(BaseModel):
+    question: QuestionOut | None  # None when the session is done
+    total: int  # questions matching the filter
+    remaining: int  # not yet seen, including the one returned
+
+
+@router.post("/next", response_model=NextResponse)
+def next_question(body: NextRequest):
+    candidates = [q for q in db.list_questions() if matches(q, body.type, body.tag, None, None, None)]
+    seen = set(body.seen)
+    unseen = [q for q in candidates if q["id"] not in seen]
+    q = pick(unseen, datetime.now(timezone.utc))
+    return {"question": public(q) if q else None, "total": len(candidates), "remaining": len(unseen)}
 
 
 class Rating(BaseModel):
     confidence: int = Field(ge=1, le=5)
 
 
-@router.post("/{question_id}/rate", response_model=Question)
+@router.post("/{question_id}/rate", response_model=QuestionOut)
 def rate(question_id: str, body: Rating):
     q = db.record_practice(question_id, body.confidence, db.now_iso())
     if not q:
         raise HTTPException(404, "Question not found")
-    return q
+    return public(q)

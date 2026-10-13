@@ -179,13 +179,15 @@ function renderList() {
         <div class="card-head">
           <span class="badge ${esc(q.type)}">${esc(q.type)}</span>
           ${confidenceDots(q.confidence)}
-          <span class="spacer"></span>
-          ${q.answer || (q.star && Object.values(q.star).some(Boolean)) ? `<button class="link" data-action="feedback">Feedback</button>` : ""}
-          <button class="link" data-action="edit">Edit</button>
-          <button class="link danger" data-action="delete">Delete</button>
+          <span class="card-actions">
+            ${q.answer || (q.star && Object.values(q.star).some(Boolean)) ? `<button class="link" data-action="feedback">Feedback</button>` : ""}
+            <button class="link" data-action="edit">Edit</button>
+            <button class="link danger" data-action="delete">Delete</button>
+          </span>
         </div>
         <h3 class="q-text">${esc(q.question)}</h3>
         ${q.tags.length ? `<div class="tags">${tagsHtml(q.tags)}</div>` : ""}
+        ${scoreChipsHtml(q.lastFeedback)}
         <details>
           <summary>Show answer</summary>
           ${answerHtml(q)}
@@ -290,7 +292,19 @@ function listHtml(items) {
   return items.length ? `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : `<p class="muted small">None.</p>`;
 }
 
-function feedbackHtml({ feedback: fb, model_id }) {
+function formatDateTime(iso) {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+// Compact scores for cards, e.g. "AI review  Clarity 4 · Structure 3 · Specificity 2".
+function scoreChipsHtml(last) {
+  if (!last) return "";
+  const parts = Object.entries(SCORE_LABELS).map(([k, label]) => `${label} <strong>${Number(last.scores[k]) || 0}</strong>`);
+  return `<p class="ai-scores small" title="AI review by ${esc(last.modelId)}, ${esc(formatDateTime(last.createdAt))}">
+    <span class="ai-label">AI review</span> ${parts.join(" · ")}</p>`;
+}
+
+function feedbackHtml({ feedback: fb, model_id, created_at, cached }) {
   const scores = Object.entries(SCORE_LABELS).map(([key, label]) => {
     const n = Number(fb.scores[key]) || 0;
     return `<div class="score">
@@ -299,7 +313,11 @@ function feedbackHtml({ feedback: fb, model_id }) {
       <span class="small">${n}/5</span>
     </div>`;
   }).join("");
+  const meta = cached
+    ? `Saved review from ${esc(formatDateTime(created_at))}, answer unchanged so no new AI call. <button class="link fb-fresh">Get fresh feedback</button>`
+    : `New review, ${esc(formatDateTime(created_at))}.`;
   return `
+    <p class="fb-meta small muted">${meta}</p>
     <div class="scores">${scores}</div>
     <h4>Strengths</h4>${listHtml(fb.strengths)}
     <h4>Gaps</h4>${listHtml(fb.gaps)}
@@ -308,17 +326,22 @@ function feedbackHtml({ feedback: fb, model_id }) {
     <p class="model-label">Model: ${esc(model_id)}</p>`;
 }
 
-// Calls the API and fills `container`. Returns true on success.
+// Calls the API and fills `container`. Returns the result, or null on error.
+// Saved reviews come back instantly; "Get fresh feedback" re-asks the model.
 async function requestFeedback(body, container, button) {
   container.hidden = false;
-  container.innerHTML = `<p class="muted">Getting feedback… this can take 10–20 seconds.</p>`;
+  container.innerHTML = `<p class="muted">Getting feedback… a new review can take 10–20 seconds.</p>`;
   if (button) button.disabled = true;
   try {
-    container.innerHTML = feedbackHtml(await api("/api/feedback", { method: "POST", body }));
-    return true;
+    const result = await api("/api/feedback", { method: "POST", body });
+    container.innerHTML = feedbackHtml(result);
+    container.querySelector(".fb-fresh")?.addEventListener("click", () =>
+      requestFeedback({ ...body, force: true }, container, button));
+    if (!result.cached) libraryStale = true; // new scores to show on the cards
+    return result;
   } catch (err) {
     container.innerHTML = `<p class="error">${esc(err.message)}</p>`;
-    return false;
+    return null;
   } finally {
     if (button) button.disabled = false;
   }
@@ -330,36 +353,63 @@ function openFeedbackDialog(q) {
   requestFeedback({ question_id: q.id }, $("#fb-dialog-body"));
 }
 
+$("#fb-dialog").addEventListener("close", () => {
+  if (libraryStale) {
+    libraryStale = false;
+    loadLibrary();
+  }
+});
 $("#fb-dialog-close").addEventListener("click", () => $("#fb-dialog").close());
 
 // ---- Practice ----
+// A session goes through each matching question once, weakest first.
 
 let current = null; // question being practiced
-let practicedCount = 0;
+let session = null; // { seen: [ids], answered, skipped, total, remaining }
+
+function newSession() {
+  session = { seen: [], answered: 0, skipped: 0, total: 0, remaining: 0 };
+  $("#p-done").hidden = true;
+}
 
 async function nextQuestion() {
-  const params = new URLSearchParams();
-  if ($("#p-type").value) params.set("type", $("#p-type").value);
-  if ($("#p-tag").value) params.set("tag", $("#p-tag").value);
-  if (current) params.set("exclude", current.id);
+  if (!session) newSession();
+  const body = { type: $("#p-type").value || null, tag: $("#p-tag").value || null, seen: session.seen };
   try {
-    current = await api(`/api/practice/next?${params}`);
+    const r = await api("/api/practice/next", { method: "POST", body });
+    session.total = r.total;
+    session.remaining = r.remaining;
+    current = r.question;
+    if (!current) return showDone();
+    session.seen.push(current.id);
     renderPractice();
   } catch (err) {
-    current = null;
-    $("#p-card").hidden = true;
-    $("#p-status").textContent = err.status === 404 ? "No questions match this filter. Add some in the Library." : err.message;
+    $("#p-status").textContent = err.message;
   }
+}
+
+function renderProgress() {
+  const done = session.answered + session.skipped;
+  $("#p-progress").hidden = false;
+  $("#p-pos").textContent = current ? `Question ${session.seen.length} of ${session.total}` : `${session.total} of ${session.total} done`;
+  const left = current ? session.remaining : 0; // includes the one on screen
+  $("#p-counts").textContent =
+    `${session.answered} answered · ${session.skipped} skipped · ${left} left`;
+  $("#p-bar").style.width = `${session.total ? (done / session.total) * 100 : 0}%`;
 }
 
 function renderPractice() {
   $("#p-status").textContent = "";
+  $("#p-done").hidden = true;
   $("#p-badge").className = `badge ${current.type}`;
   $("#p-badge").textContent = current.type;
   $("#p-dots").innerHTML = confidenceDots(current.confidence);
   $("#p-question").textContent = current.question;
   $("#p-tags").innerHTML = tagsHtml(current.tags);
   $("#p-answer-body").innerHTML = answerHtml(current);
+  $("#p-last-fb").innerHTML = scoreChipsHtml(current.lastFeedback);
+  $("#p-fb-saved").textContent = current.lastFeedback
+    ? "Show AI feedback on my saved answer" : "Get AI feedback on my saved answer";
   $("#p-answer").hidden = true;
   $("#p-reveal").hidden = false;
   $("#p-feedback").hidden = true;
@@ -367,9 +417,23 @@ function renderPractice() {
   $("#p-try").open = false;
   $("#p-save-typed").hidden = true;
   $("#p-card").hidden = false;
+  renderProgress();
   // Drop focus from the clicked button so Space doesn't re-click it.
   document.activeElement?.blur();
-  $("#p-count").textContent = practicedCount ? `${practicedCount} practiced this session` : "";
+}
+
+function showDone() {
+  $("#p-card").hidden = true;
+  if (!session.total) {
+    $("#p-progress").hidden = true;
+    $("#p-status").textContent = "No questions match this filter. Add some in the Library.";
+    return;
+  }
+  renderProgress();
+  $("#p-done-text").textContent =
+    `You went through all ${session.total} question${session.total === 1 ? "" : "s"}: ` +
+    `${session.answered} answered, ${session.skipped} skipped.`;
+  $("#p-done").hidden = false;
 }
 
 function reveal() {
@@ -382,12 +446,18 @@ async function rate(confidence) {
   if (!current || $("#p-answer").hidden) return; // rate only after reveal
   try {
     await api(`/api/practice/${encodeURIComponent(current.id)}/rate`, { method: "POST", body: { confidence } });
-    practicedCount += 1;
+    session.answered += 1;
     libraryStale = true;
     nextQuestion();
   } catch (err) {
     $("#p-status").textContent = err.message;
   }
+}
+
+function skip() {
+  if (!current) return;
+  session.skipped += 1;
+  nextQuestion();
 }
 
 $("#p-fb-saved").addEventListener("click", (e) => {
@@ -401,8 +471,8 @@ $("#p-fb-typed").addEventListener("click", async (e) => {
     $("#p-feedback").innerHTML = `<p class="muted">Type an answer first.</p>`;
     return;
   }
-  const ok = await requestFeedback({ question_id: current.id, answer }, $("#p-feedback"), e.currentTarget);
-  $("#p-save-typed").hidden = !ok;
+  const result = await requestFeedback({ question_id: current.id, answer }, $("#p-feedback"), e.currentTarget);
+  $("#p-save-typed").hidden = !result;
 });
 
 // Replace the saved answer with the typed one, keeping everything else.
@@ -415,6 +485,7 @@ $("#p-save-typed").addEventListener("click", async () => {
       method: "PUT", body: { type, question, answer, star, tags, confidence, notes },
     });
     $("#p-answer-body").innerHTML = answerHtml(current);
+    $("#p-last-fb").innerHTML = scoreChipsHtml(current.lastFeedback);
     $("#p-save-typed").hidden = true;
     libraryStale = true;
   } catch (err) {
@@ -422,11 +493,15 @@ $("#p-save-typed").addEventListener("click", async () => {
   }
 });
 
-$("#p-start").addEventListener("click", () => {
+function startSession() {
   current = null;
+  newSession();
   nextQuestion();
-});
-$("#p-skip").addEventListener("click", nextQuestion);
+}
+
+$("#p-start").addEventListener("click", startSession);
+$("#p-again").addEventListener("click", startSession);
+$("#p-skip").addEventListener("click", skip);
 $("#p-reveal").addEventListener("click", reveal);
 for (const b of document.querySelectorAll("[data-rate]")) {
   b.addEventListener("click", () => rate(Number(b.dataset.rate)));
@@ -435,7 +510,7 @@ for (const b of document.querySelectorAll("[data-rate]")) {
 // Keyboard: space reveals, 1-5 rates. Ignored while typing or when a dialog is open.
 document.addEventListener("keydown", (e) => {
   if ($("#view-practice").hidden || $("#app").hidden || !current) return;
-  if (e.target.closest("input, textarea, select, dialog") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest?.("input, textarea, select, dialog") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === " ") {
     e.preventDefault();
     reveal();

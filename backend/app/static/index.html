@@ -78,11 +78,23 @@
             <option value="">All tags</option>
           </select>
           <button id="p-start" class="primary">Start practice</button>
-          <span class="spacer"></span>
-          <span id="p-count" class="muted small"></span>
+        </div>
+
+        <div id="p-progress" hidden>
+          <div class="progress-text">
+            <strong id="p-pos"></strong>
+            <span id="p-counts" class="muted small"></span>
+          </div>
+          <div class="bar progress-bar"><span id="p-bar"></span></div>
         </div>
 
         <p id="p-status" class="muted"></p>
+
+        <div id="p-done" class="card practice-card" hidden>
+          <h2>Session complete</h2>
+          <p id="p-done-text"></p>
+          <button id="p-again" class="primary">Practice again</button>
+        </div>
 
         <article id="p-card" class="card practice-card" hidden>
           <div class="card-head">
@@ -107,6 +119,7 @@
 
           <div id="p-answer" hidden>
             <div id="p-answer-body"></div>
+            <div id="p-last-fb"></div>
             <button id="p-fb-saved" class="link">Get AI feedback on my saved answer</button>
             <div class="rate">
               <p class="small muted">How confident do you feel now?</p>

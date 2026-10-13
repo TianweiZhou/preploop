@@ -174,3 +174,95 @@ def test_route_errors(client, fake):
 
 def test_route_needs_login(anon_client):
     assert anon_client.post("/api/feedback", json={"question_id": "x"}).status_code == 401
+
+
+# ---- Stored feedback (no repeat calls for an unchanged answer) ----
+
+def saved_question(client, **overrides):
+    body = {"type": "technical", "question": "RAG?", "answer": "Retrieval", **overrides}
+    return client.post("/api/questions", json=body).json()
+
+
+def test_unchanged_answer_reuses_stored_feedback(client, fake):
+    bedrock = fake(json.dumps(GOOD))  # only one reply queued: a second call would fail
+    q = saved_question(client)
+    assert q["lastFeedback"] is None
+
+    first = client.post("/api/feedback", json={"question_id": q["id"]}).json()
+    second = client.post("/api/feedback", json={"question_id": q["id"]}).json()
+    assert first["cached"] is False and second["cached"] is True
+    assert second["feedback"] == first["feedback"]
+    assert second["created_at"] == first["created_at"]
+    assert len(bedrock.calls) == 1
+
+    # The card now shows the scores.
+    last = client.get(f"/api/questions/{q['id']}").json()["lastFeedback"]
+    assert last["scores"] == {"clarity": 4, "structure": 3, "specificity": 2}
+    assert last["modelId"] == "test-model-id"
+    assert "aiFeedback" not in client.get(f"/api/questions/{q['id']}").json()
+
+
+def test_edited_answer_calls_model_again(client, fake):
+    bedrock = fake(json.dumps(GOOD), json.dumps({**GOOD, "scores": {"clarity": 5, "structure": 5, "specificity": 5}}))
+    q = saved_question(client)
+    client.post("/api/feedback", json={"question_id": q["id"]})
+
+    edited = client.put(f"/api/questions/{q['id']}", json={"type": "technical", "question": "RAG?",
+                                                            "answer": "Retrieval, better"}).json()
+    assert edited["lastFeedback"] is None  # old scores no longer match the answer
+
+    r = client.post("/api/feedback", json={"question_id": q["id"]}).json()
+    assert r["cached"] is False and len(bedrock.calls) == 2
+    assert client.get(f"/api/questions/{q['id']}").json()["lastFeedback"]["scores"]["clarity"] == 5
+
+
+def test_force_asks_again(client, fake):
+    bedrock = fake(json.dumps(GOOD), json.dumps(GOOD))
+    q = saved_question(client)
+    client.post("/api/feedback", json={"question_id": q["id"]})
+    r = client.post("/api/feedback", json={"question_id": q["id"], "force": True}).json()
+    assert r["cached"] is False and len(bedrock.calls) == 2
+
+
+def test_typed_answer_keeps_saved_answer_feedback(client, fake):
+    bedrock = fake(json.dumps(GOOD), json.dumps(GOOD))
+    q = saved_question(client)
+    client.post("/api/feedback", json={"question_id": q["id"]})
+    client.post("/api/feedback", json={"question_id": q["id"], "answer": "a typed attempt"})
+    assert len(bedrock.calls) == 2
+
+    # Saved answer is still cached, and still shown on the card.
+    assert client.post("/api/feedback", json={"question_id": q["id"]}).json()["cached"] is True
+    assert client.get(f"/api/questions/{q['id']}").json()["lastFeedback"] is not None
+
+    # Saving the typed answer makes its stored feedback the current one.
+    client.put(f"/api/questions/{q['id']}", json={"type": "technical", "question": "RAG?", "answer": "a typed attempt"})
+    assert client.post("/api/feedback", json={"question_id": q["id"]}).json()["cached"] is True
+    assert len(bedrock.calls) == 2
+
+
+def test_different_model_is_not_reused(client, fake, monkeypatch):
+    bedrock = fake(json.dumps(GOOD), json.dumps(GOOD))
+    q = saved_question(client)
+    client.post("/api/feedback", json={"question_id": q["id"]})
+    monkeypatch.setenv("FEEDBACK_MODEL_ID", "claude-model-id")
+    r = client.post("/api/feedback", json={"question_id": q["id"]}).json()
+    assert r["cached"] is False and r["model_id"] == "claude-model-id"
+    assert len(bedrock.calls) == 2
+
+
+def test_stored_history_is_capped(client, fake):
+    fake(*[json.dumps(GOOD)] * 5)
+    q = saved_question(client)
+    for i in range(5):
+        client.post("/api/feedback", json={"question_id": q["id"], "answer": f"attempt {i}"})
+    from app import db
+    assert len(db.get_question(q["id"])["aiFeedback"]) == 3
+
+
+def test_raw_question_is_not_stored(client, fake):
+    bedrock = fake(json.dumps(GOOD), json.dumps(GOOD))
+    body = {"type": "technical", "question": "q", "answer": "a"}
+    assert client.post("/api/feedback", json=body).json()["cached"] is False
+    assert client.post("/api/feedback", json=body).json()["cached"] is False
+    assert len(bedrock.calls) == 2

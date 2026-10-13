@@ -146,6 +146,7 @@ pytest -q
 
 ### 2. Practice mode
 - Pick a filter (type, tag) and start a session
+- A session goes through each matching question once, with a progress bar and answered / skipped / left counts, then a "session complete" summary
 - Shows the question only
 - Button to reveal my saved answer
 - After reveal, I rate my confidence 1 to 5, which updates the question
@@ -155,6 +156,8 @@ pytest -q
 
 ### 3. AI feedback (Bedrock)
 - "Get feedback" button on any question with an answer, and in practice mode
+- Feedback is stored on the question (last 3 reviews). If the type, question, and answer text are unchanged and the model is the same, the stored review is returned without calling Bedrock. A "Get fresh feedback" link forces a new call
+- Library cards and practice show the latest AI scores for the current answer
 - Backend sends the question, type, tags, and the answer to the model through the **Bedrock Converse API**
 - Use Converse (not the model-specific InvokeModel formats) so switching from Nova to Claude later is only a config change, with no code change
 - Model ID comes from a SAM parameter / env var (`FEEDBACK_MODEL_ID`), never hardcoded
@@ -244,9 +247,9 @@ All JSON, all under `/api`.
 | GET | `/api/questions/{id}` | Get one |
 | PUT | `/api/questions/{id}` | Update |
 | DELETE | `/api/questions/{id}` | Delete |
-| GET | `/api/practice/next` | Next weighted question, supports `type`, `tag` |
+| POST | `/api/practice/next` | Next weighted question. Body: `type`, `tag`, `seen` (ids already shown this session). Returns `{question, total, remaining}`, `question` is null when the session is done |
 | POST | `/api/practice/{id}/rate` | Save confidence, update practice stats |
-| POST | `/api/feedback` | Body: `question_id` or raw `{question, type, answer}`, returns AI feedback JSON plus model ID |
+| POST | `/api/feedback` | Body: `question_id` (optional `answer` to review a fresh one) or raw `{question, type, answer}`, plus optional `force`. Returns AI feedback JSON, model ID, `created_at`, and `cached` |
 | POST | `/api/import` | Upload JSON or CSV |
 | GET | `/api/export?format=json\|csv` | Download all data |
 | GET | `/api/health` | Health check, no auth |

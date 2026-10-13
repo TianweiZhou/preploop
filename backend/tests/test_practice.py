@@ -36,11 +36,7 @@ def test_pick_distribution_favors_weak_questions():
     assert counts["weak"] > counts["strong"] * 15
 
 
-def test_pick_excludes_last_unless_only_one():
-    questions = [q("a", 1), q("b", 5, 0)]
-    for _ in range(50):
-        assert pick(questions, NOW, exclude="a")["id"] == "b"
-    assert pick([q("a", 1)], NOW, exclude="a")["id"] == "a"
+def test_pick_empty():
     assert pick([], NOW) is None
 
 
@@ -49,16 +45,33 @@ def make(client, **overrides):
     return client.post("/api/questions", json=body).json()
 
 
+def next_q(client, **body):
+    r = client.post("/api/practice/next", json=body)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
 def test_next_respects_filters(client):
     make(client, question="Tech", tags=["AWS"])
     make(client, question="Behav", type="behavioral", tags=["leadership"])
 
     for _ in range(10):
-        assert client.get("/api/practice/next", params={"type": "behavioral"}).json()["question"] == "Behav"
-        assert client.get("/api/practice/next", params={"tag": "aws"}).json()["question"] == "Tech"
+        assert next_q(client, type="behavioral")["question"]["question"] == "Behav"
+        assert next_q(client, tag="aws")["question"]["question"] == "Tech"
 
-    r = client.get("/api/practice/next", params={"tag": "nope"})
-    assert r.status_code == 404
+    assert next_q(client, tag="nope") == {"question": None, "total": 0, "remaining": 0}
+
+
+def test_session_goes_through_each_question_once(client):
+    ids = {make(client, question=f"Q{i}")["id"] for i in range(4)}
+    seen = []
+    for expected_remaining in [4, 3, 2, 1]:
+        r = next_q(client, seen=seen)
+        assert r["total"] == 4 and r["remaining"] == expected_remaining
+        assert r["question"]["id"] not in seen
+        seen.append(r["question"]["id"])
+    assert set(seen) == ids
+    assert next_q(client, seen=seen) == {"question": None, "total": 4, "remaining": 0}
 
 
 def test_rate_updates_stats(client):
@@ -82,4 +95,4 @@ def test_rate_errors(client):
 
 
 def test_practice_needs_login(anon_client):
-    assert anon_client.get("/api/practice/next").status_code == 401
+    assert anon_client.post("/api/practice/next", json={}).status_code == 401

@@ -52,11 +52,25 @@ class QuestionIn(BaseModel):
         return self
 
 
-class Question(QuestionIn):
-    """A stored question, including practice stats."""
+class QuestionBase(QuestionIn):
+    """A question with id and practice stats."""
 
     id: str
     lastPracticed: str | None = None
     timesPracticed: int = 0
     createdAt: str
     updatedAt: str
+
+
+class Question(QuestionBase):
+    """What's stored in DynamoDB. aiFeedback holds the last few AI reviews
+    ({answerHash, modelId, feedback, createdAt}), newest first."""
+
+    aiFeedback: list[dict] = Field(default_factory=list)
+
+
+class QuestionOut(QuestionBase):
+    """What the API returns: just the scores of the latest review of the
+    current answer, not the full stored feedback history."""
+
+    lastFeedback: dict | None = None

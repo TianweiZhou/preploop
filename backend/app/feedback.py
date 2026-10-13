@@ -4,6 +4,7 @@ Converse works the same for Nova and Claude, so switching models is just a
 FEEDBACK_MODEL_ID change. Prompts are kept short so cheaper models follow them.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -66,6 +67,51 @@ def parse_feedback(text: str) -> Feedback:
         return Feedback.model_validate(json.loads(text[start:end + 1]))
     except (json.JSONDecodeError, ValidationError, TypeError) as e:
         raise ValueError(str(e)) from e
+
+
+# ---- Stored feedback ----
+
+MAX_STORED = 3  # reviews kept per question
+
+
+def review_text(answer: str, star: dict | None) -> str:
+    """The text that gets reviewed: the answer plus any STAR notes."""
+    parts = [f"{k.capitalize()}: {v}" for k, v in (star or {}).items() if v]
+    return "\n\n".join(filter(None, [answer, "\n".join(parts)]))
+
+
+def answer_hash(type: str, question: str, answer: str) -> str:
+    """Fingerprint of what was reviewed. Same hash = same input, so the stored result can be reused."""
+    raw = json.dumps([type, question.strip(), answer.strip()], ensure_ascii=False)
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def find_stored(q: dict, hash: str, model: str | None = None) -> dict | None:
+    """Newest stored review for this hash (and model, if given)."""
+    for entry in q.get("aiFeedback") or []:
+        if entry.get("answerHash") == hash and (model is None or entry.get("modelId") == model):
+            return entry
+    return None
+
+
+def add_stored(q: dict, entry: dict) -> list[dict]:
+    """New list with entry first, replacing any older one for the same hash+model."""
+    others = [e for e in q.get("aiFeedback") or []
+              if (e.get("answerHash"), e.get("modelId")) != (entry["answerHash"], entry["modelId"])]
+    return [entry, *others][:MAX_STORED]
+
+
+def public(q: dict) -> dict:
+    """API view of a stored question: drop the feedback history, add the latest
+    scores for the current saved answer (from any model)."""
+    out = {k: v for k, v in q.items() if k != "aiFeedback"}
+    current = answer_hash(q["type"], q["question"], review_text(q.get("answer", ""), q.get("star")))
+    entry = find_stored(q, current)
+    out["lastFeedback"] = (
+        {"scores": entry["feedback"]["scores"], "modelId": entry["modelId"], "createdAt": entry["createdAt"]}
+        if entry else None
+    )
+    return out
 
 
 # ---- Prompts ----

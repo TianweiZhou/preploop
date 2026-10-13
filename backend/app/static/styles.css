@@ -152,8 +152,18 @@ button.link.danger { color: var(--error); }
 
 .card-head {
   display: flex;
+  flex-wrap: wrap; /* buttons drop to a new line on narrow phones */
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
+}
+
+.card { min-width: 0; overflow-wrap: anywhere; }
+
+/* Edit / Delete / Feedback stay together, pushed right. */
+.card-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .q-text {
@@ -406,3 +416,37 @@ pre {
 }
 
 #import-result ul { margin: 4px 0; padding-left: 20px; }
+
+/* ---- AI scores on cards, practice progress ---- */
+
+.ai-scores { margin: 2px 0 6px; color: var(--muted); }
+.ai-scores strong { color: var(--text); }
+
+.ai-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  margin-right: 4px;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.fb-meta { margin: 0 0 10px; }
+.fb-meta .link { padding: 0 2px; font-size: inherit; }
+
+#p-progress { margin: 4px 0 12px; }
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 6px;
+}
+
+.progress-bar { height: 6px; }
+#p-bar { transition: width 0.2s; }
+
+#p-done h2 { margin: 0 0 4px; }
