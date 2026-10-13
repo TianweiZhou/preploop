@@ -91,10 +91,12 @@ Run the app (from `backend/`):
 
 ```bash
 cd backend
-uvicorn app.main:app --reload --port 8000
+LOCAL_MOCK_DB=1 uvicorn app.main:app --reload --port 8000
 ```
 
 Open http://localhost:8000 (port 8000 matches the Google OAuth origin). Health check: http://localhost:8000/api/health
+
+`LOCAL_MOCK_DB=1` runs an in-memory DynamoDB (moto), so you don't need AWS for local work. Data is wiped on every restart or reload. To use the real deployed table instead, drop that flag and set `TABLE_NAME` and your AWS profile/region.
 
 Run tests (from `backend/`):
 

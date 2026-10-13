@@ -1,3 +1,4 @@
 # Runtime dependencies (packaged into Lambda by sam build)
 fastapi==0.143.0
 mangum==0.22.0
+boto3==1.43.112
