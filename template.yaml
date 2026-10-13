@@ -29,6 +29,8 @@ Resources:
   QuestionsTable:
     Type: AWS::DynamoDB::Table
     Properties:
+      # Readable names, prefixed with the stack name so they stay unique per stack.
+      TableName: !Sub ${AWS::StackName}-questions
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: pk
@@ -40,6 +42,7 @@ Resources:
   AppFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub ${AWS::StackName}-app
       CodeUri: backend/
       Handler: app.main.handler
       Runtime: python3.12

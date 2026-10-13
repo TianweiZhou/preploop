@@ -214,7 +214,7 @@ Notes:
 
 One DynamoDB table, on-demand billing. The dataset is small (hundreds of items), so a full `Scan` plus filtering in Python is fine. Don't over-design the keys.
 
-Table: named by CloudFormation (see the `TableName` stack output) instead of a fixed `InterviewPrepTable`, so names never clash.
+Table: `<stack name>-questions` (e.g. `preploop-questions`) instead of a fixed `InterviewPrepTable`, so a second stack never clashes. The Lambda function is `<stack name>-app`.
 - Partition key: `pk` (string), e.g. `Q#<uuid>`
 
 Item attributes:
@@ -388,6 +388,8 @@ Logs if something breaks:
 ```bash
 sam logs --stack-name preploop --name AppFunction --profile dev --tail
 ```
+
+Or in the console: CloudWatch > Log groups > `/aws/lambda/preploop-app`.
 
 ### Tear down
 ```bash
