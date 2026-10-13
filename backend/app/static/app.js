@@ -444,6 +444,42 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// ---- Import / Export ----
+
+$("#import-btn").addEventListener("click", async (e) => {
+  const button = e.currentTarget; // currentTarget is null after an await
+  const file = $("#import-file").files[0];
+  const out = $("#import-result");
+  out.hidden = false;
+  if (!file) {
+    out.innerHTML = `<p class="error">Choose a file first.</p>`;
+    return;
+  }
+  if (file.size > 1_000_000) {
+    out.innerHTML = `<p class="error">File is too big (max 1 MB).</p>`;
+    return;
+  }
+  button.disabled = true;
+  out.innerHTML = `<p class="muted">Importing…</p>`;
+  try {
+    const r = await api("/api/import", {
+      method: "POST", body: await file.text(), headers: { "Content-Type": "text/plain" },
+    });
+    const errors = r.errors.map((x) => `<li>Row ${x.row}: ${esc(x.error)}</li>`).join("");
+    const more = r.error_count > r.errors.length ? `<li>…and ${r.error_count - r.errors.length} more</li>` : "";
+    out.innerHTML = `
+      <p><strong>Imported ${r.imported}</strong> · skipped ${r.skipped_duplicates} duplicate${r.skipped_duplicates === 1 ? "" : "s"}
+      ${r.error_count ? ` · <span class="error">${r.error_count} row${r.error_count === 1 ? "" : "s"} with errors</span>` : ""}</p>
+      ${errors ? `<ul class="error">${errors}${more}</ul>` : ""}`;
+    $("#import-file").value = "";
+    libraryStale = true;
+  } catch (err) {
+    out.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  } finally {
+    button.disabled = false;
+  }
+});
+
 // ---- Start ----
 
 (async function init() {

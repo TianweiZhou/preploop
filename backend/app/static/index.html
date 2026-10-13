@@ -125,9 +125,36 @@
         </article>
       </section>
 
-      <!-- Import / Export (step 7) -->
+      <!-- Import / Export -->
       <section id="view-io" hidden>
-        <p class="muted">Import and export are coming soon.</p>
+        <div class="card io-card">
+          <h3>Import</h3>
+          <p class="small muted">
+            JSON or CSV, up to 1 MB. Questions that already exist (same text) are skipped.
+          </p>
+          <div class="io-row">
+            <input id="import-file" type="file" accept=".json,.csv,application/json,text/csv">
+            <button id="import-btn" class="primary">Import</button>
+          </div>
+          <div id="import-result" class="small" hidden></div>
+          <details class="small">
+            <summary>CSV format</summary>
+            <p>Header row with these columns. Tags are separated by <code>;</code>, confidence is 1 to 5 (blank = 3).</p>
+            <pre>type,question,answer,tags,confidence
+technical,What is RAG?,Retrieval plus generation,RAG;LLM,2
+behavioral,Tell me about a conflict,"I talked to them, then...",leadership,3</pre>
+            <p>Optional columns: notes, situation, task, action, result. An exported CSV can be imported back as is.</p>
+          </details>
+        </div>
+
+        <div class="card io-card">
+          <h3>Export</h3>
+          <p class="small muted">Download everything, including STAR notes and practice stats.</p>
+          <div class="io-row">
+            <a class="button" href="/api/export?format=json" download>Download JSON</a>
+            <a class="button" href="/api/export?format=csv" download>Download CSV</a>
+          </div>
+        </div>
       </section>
     </main>
   </div>

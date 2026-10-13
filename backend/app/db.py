@@ -52,6 +52,13 @@ def put_question(question: dict) -> None:
     table().put_item(Item={"pk": _pk(question["id"]), **question})
 
 
+def put_many(questions: list[dict]) -> None:
+    """Bulk write, used by import."""
+    with table().batch_writer() as batch:
+        for q in questions:
+            batch.put_item(Item={"pk": _pk(q["id"]), **q})
+
+
 def record_practice(question_id: str, confidence: int, when: str) -> dict | None:
     """Save a practice rating. Returns the updated question, or None if it doesn't exist."""
     try:
