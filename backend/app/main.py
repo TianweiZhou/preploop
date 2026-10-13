@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from mangum import Mangum
 
 from app import auth, db
-from app.routes import questions
+from app.routes import practice, questions
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -29,6 +29,7 @@ app.include_router(auth.router)
 # Everything below needs a valid session cookie.
 protected = [Depends(auth.require_user)]
 app.include_router(questions.router, dependencies=protected)
+app.include_router(practice.router, dependencies=protected)
 
 
 @app.get("/api/health")

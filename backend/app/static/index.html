@@ -66,9 +66,51 @@
         <div id="q-list" class="cards"></div>
       </section>
 
-      <!-- Practice (step 5) -->
+      <!-- Practice -->
       <section id="view-practice" hidden>
-        <p class="muted">Practice mode is coming soon.</p>
+        <div class="toolbar">
+          <select id="p-type" aria-label="Type">
+            <option value="">All types</option>
+            <option value="technical">Technical</option>
+            <option value="behavioral">Behavioral</option>
+          </select>
+          <select id="p-tag" aria-label="Tag">
+            <option value="">All tags</option>
+          </select>
+          <button id="p-start" class="primary">Start practice</button>
+          <span class="spacer"></span>
+          <span id="p-count" class="muted small"></span>
+        </div>
+
+        <p id="p-status" class="muted"></p>
+
+        <article id="p-card" class="card practice-card" hidden>
+          <div class="card-head">
+            <span id="p-badge" class="badge"></span>
+            <span id="p-dots"></span>
+            <span class="spacer"></span>
+            <button id="p-skip" class="link">Skip</button>
+          </div>
+          <h2 id="p-question" class="q-text"></h2>
+          <div id="p-tags" class="tags"></div>
+
+          <button id="p-reveal" class="primary">Reveal answer <kbd>Space</kbd></button>
+
+          <div id="p-answer" hidden>
+            <div id="p-answer-body"></div>
+            <div class="rate">
+              <p class="small muted">How confident do you feel now?</p>
+              <div class="rate-buttons">
+                <button data-rate="1">1</button>
+                <button data-rate="2">2</button>
+                <button data-rate="3">3</button>
+                <button data-rate="4">4</button>
+                <button data-rate="5">5</button>
+              </div>
+              <p class="small muted kbd-hint">Keys 1–5 work too.</p>
+            </div>
+          </div>
+        </article>
       </section>
 
       <!-- Import / Export (step 7) -->

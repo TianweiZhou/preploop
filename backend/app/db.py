@@ -52,6 +52,21 @@ def put_question(question: dict) -> None:
     table().put_item(Item={"pk": _pk(question["id"]), **question})
 
 
+def record_practice(question_id: str, confidence: int, when: str) -> dict | None:
+    """Save a practice rating. Returns the updated question, or None if it doesn't exist."""
+    try:
+        resp = table().update_item(
+            Key={"pk": _pk(question_id)},
+            UpdateExpression="SET confidence = :c, lastPracticed = :t ADD timesPracticed :one",
+            ConditionExpression="attribute_exists(pk)",
+            ExpressionAttributeValues={":c": confidence, ":t": when, ":one": 1},
+            ReturnValues="ALL_NEW",
+        )
+    except table().meta.client.exceptions.ConditionalCheckFailedException:
+        return None
+    return _clean(resp["Attributes"])
+
+
 def delete_question(question_id: str) -> bool:
     """Returns False if it didn't exist."""
     resp = table().delete_item(Key={"pk": _pk(question_id)}, ReturnValues="ALL_OLD")

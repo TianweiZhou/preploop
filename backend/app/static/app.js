@@ -89,12 +89,18 @@ for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => {
     for (const t of document.querySelectorAll(".tab")) t.classList.toggle("active", t === tab);
     for (const view of ["library", "practice", "io"]) $(`#view-${view}`).hidden = view !== tab.dataset.view;
+    // Ratings change confidence and practice stats, so refresh the list.
+    if (tab.dataset.view === "library" && libraryStale) {
+      libraryStale = false;
+      loadLibrary();
+    }
   });
 }
 
 // ---- Library ----
 
 let questions = []; // the currently shown (filtered) list
+let libraryStale = false; // set after practice ratings
 
 function filterParams() {
   const params = new URLSearchParams();
@@ -129,18 +135,37 @@ async function loadLibrary({ refreshTags = true } = {}) {
   }
 }
 
+// Rebuild the tag dropdowns (library and practice), keeping the current choice.
 function fillTagFilter(all) {
-  const select = $("#f-tag");
-  const current = select.value;
   const tags = [...new Set(all.flatMap((q) => q.tags))].sort((a, b) => a.localeCompare(b));
-  select.innerHTML = `<option value="">All tags</option>` +
-    tags.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
-  if (tags.includes(current)) select.value = current;
+  for (const select of [$("#f-tag"), $("#p-tag")]) {
+    const current = select.value;
+    select.innerHTML = `<option value="">All tags</option>` +
+      tags.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+    if (tags.includes(current)) select.value = current;
+  }
 }
 
 function confidenceDots(n) {
   return `<span class="dots" title="Confidence ${n}/5">${[1, 2, 3, 4, 5]
     .map((i) => `<span class="dot${i <= n ? " on" : ""}"></span>`).join("")}</span>`;
+}
+
+// Answer, STAR parts, and notes. Shared by the library and practice views.
+function answerHtml(q) {
+  const star = q.star && Object.values(q.star).some(Boolean)
+    ? `<dl class="star">${["situation", "task", "action", "result"]
+        .filter((k) => q.star[k])
+        .map((k) => `<dt>${k}</dt><dd>${esc(q.star[k])}</dd>`).join("")}</dl>`
+    : "";
+  return `
+    ${q.answer ? `<p class="answer">${esc(q.answer)}</p>` : `<p class="muted">No answer yet.</p>`}
+    ${star}
+    ${q.notes ? `<p class="notes"><strong>Notes:</strong> ${esc(q.notes)}</p>` : ""}`;
+}
+
+function tagsHtml(tags) {
+  return tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("");
 }
 
 function renderList() {
@@ -149,13 +174,7 @@ function renderList() {
     list.innerHTML = `<p class="empty muted">No questions yet. Add one to get started.</p>`;
     return;
   }
-  list.innerHTML = questions.map((q) => {
-    const star = q.star && Object.values(q.star).some(Boolean)
-      ? `<dl class="star">${["situation", "task", "action", "result"]
-          .filter((k) => q.star[k])
-          .map((k) => `<dt>${k}</dt><dd>${esc(q.star[k])}</dd>`).join("")}</dl>`
-      : "";
-    return `
+  list.innerHTML = questions.map((q) => `
       <article class="card" data-id="${esc(q.id)}">
         <div class="card-head">
           <span class="badge ${esc(q.type)}">${esc(q.type)}</span>
@@ -165,16 +184,13 @@ function renderList() {
           <button class="link danger" data-action="delete">Delete</button>
         </div>
         <h3 class="q-text">${esc(q.question)}</h3>
-        ${q.tags.length ? `<div class="tags">${q.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
+        ${q.tags.length ? `<div class="tags">${tagsHtml(q.tags)}</div>` : ""}
         <details>
           <summary>Show answer</summary>
-          ${q.answer ? `<p class="answer">${esc(q.answer)}</p>` : `<p class="muted">No answer yet.</p>`}
-          ${star}
-          ${q.notes ? `<p class="notes"><strong>Notes:</strong> ${esc(q.notes)}</p>` : ""}
+          ${answerHtml(q)}
         </details>
         <p class="meta muted small">Practiced ${q.timesPracticed}× · last ${formatDate(q.lastPracticed)} · added ${formatDate(q.createdAt)}</p>
-      </article>`;
-  }).join("");
+      </article>`).join("");
 }
 
 // Edit / delete buttons on cards.
@@ -261,6 +277,82 @@ form.addEventListener("submit", async (e) => {
   } catch (err) {
     $("#q-form-error").textContent = err.message;
     $("#q-form-error").hidden = false;
+  }
+});
+
+// ---- Practice ----
+
+let current = null; // question being practiced
+let practicedCount = 0;
+
+async function nextQuestion() {
+  const params = new URLSearchParams();
+  if ($("#p-type").value) params.set("type", $("#p-type").value);
+  if ($("#p-tag").value) params.set("tag", $("#p-tag").value);
+  if (current) params.set("exclude", current.id);
+  try {
+    current = await api(`/api/practice/next?${params}`);
+    renderPractice();
+  } catch (err) {
+    current = null;
+    $("#p-card").hidden = true;
+    $("#p-status").textContent = err.status === 404 ? "No questions match this filter. Add some in the Library." : err.message;
+  }
+}
+
+function renderPractice() {
+  $("#p-status").textContent = "";
+  $("#p-badge").className = `badge ${current.type}`;
+  $("#p-badge").textContent = current.type;
+  $("#p-dots").innerHTML = confidenceDots(current.confidence);
+  $("#p-question").textContent = current.question;
+  $("#p-tags").innerHTML = tagsHtml(current.tags);
+  $("#p-answer-body").innerHTML = answerHtml(current);
+  $("#p-answer").hidden = true;
+  $("#p-reveal").hidden = false;
+  $("#p-card").hidden = false;
+  // Drop focus from the clicked button so Space doesn't re-click it.
+  document.activeElement?.blur();
+  $("#p-count").textContent = practicedCount ? `${practicedCount} practiced this session` : "";
+}
+
+function reveal() {
+  if (!current || !$("#p-answer").hidden) return;
+  $("#p-answer").hidden = false;
+  $("#p-reveal").hidden = true;
+}
+
+async function rate(confidence) {
+  if (!current || $("#p-answer").hidden) return; // rate only after reveal
+  try {
+    await api(`/api/practice/${encodeURIComponent(current.id)}/rate`, { method: "POST", body: { confidence } });
+    practicedCount += 1;
+    libraryStale = true;
+    nextQuestion();
+  } catch (err) {
+    $("#p-status").textContent = err.message;
+  }
+}
+
+$("#p-start").addEventListener("click", () => {
+  current = null;
+  nextQuestion();
+});
+$("#p-skip").addEventListener("click", nextQuestion);
+$("#p-reveal").addEventListener("click", reveal);
+for (const b of document.querySelectorAll("[data-rate]")) {
+  b.addEventListener("click", () => rate(Number(b.dataset.rate)));
+}
+
+// Keyboard: space reveals, 1-5 rates. Ignored while typing or when a dialog is open.
+document.addEventListener("keydown", (e) => {
+  if ($("#view-practice").hidden || $("#app").hidden || !current) return;
+  if (e.target.closest("input, textarea, select, dialog") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === " ") {
+    e.preventDefault();
+    reveal();
+  } else if (/^[1-5]$/.test(e.key)) {
+    rate(Number(e.key));
   }
 });
 
