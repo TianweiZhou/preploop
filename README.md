@@ -413,10 +413,10 @@ AWS access uses **OIDC**: GitHub proves the job is from this repo's `main` branc
 
 ### One-time setup
 
-1. Create the deploy role. The account already has GitHub's OIDC provider, so `CreateOidcProvider` stays `false` (set it to `true` in an account that doesn't):
+1. Create (or update) the deploy role. Pass `GitHubRepo` explicitly: on an existing stack, `cloudformation deploy` keeps old parameter values and ignores new template defaults. The account already has GitHub's OIDC provider, so `CreateOidcProvider` stays `false` (set it to `true` in an account that doesn't):
 
    ```bash
-   aws cloudformation deploy --profile dev --region us-east-1 --stack-name github-deploy-preploop --template-file infra/github-deploy-role.yaml --capabilities CAPABILITY_NAMED_IAM
+   aws cloudformation deploy --profile dev --region us-east-1 --stack-name github-deploy-preploop --template-file infra/github-deploy-role.yaml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides GitHubRepo=TianweiZhou@43148828/preploop@1417624262
    ```
 
 2. Get the role ARN:
