@@ -4,40 +4,78 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#4f46e5">
   <title>PrepLoop</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236366f1'/%3E%3Cstop offset='1' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M10.7 16a5.3 5.3 0 0 1 9-3.8l1.6 1.6M21.3 9.3v4.5h-4.5M21.3 16a5.3 5.3 0 0 1-9 3.8l-1.6-1.6M10.7 22.7v-4.5h4.5' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
   <!-- Shown until we know whether there's a session. -->
-  <main id="loading" class="center"><p class="muted">Loading…</p></main>
+  <div id="loading" class="splash">
+    <span class="logo-mark lg"><i data-icon="logo"></i></span>
+  </div>
 
-  <main id="login" class="center" hidden>
-    <h1>PrepLoop</h1>
-    <p class="muted">Practice your interview answers.</p>
-    <div id="google-button"></div>
-    <p id="login-error" class="error" hidden></p>
+  <!-- Login -->
+  <main id="login" class="login" hidden>
+    <div class="login-card">
+      <div class="brand-row">
+        <span class="logo-mark"><i data-icon="logo"></i></span>
+        <span class="brand-name">PrepLoop</span>
+      </div>
+      <h1>Walk into every interview ready.</h1>
+      <p class="lead">Keep your best answers in one place, practice the weak ones first, and get honest AI feedback.</p>
+      <ul class="login-points">
+        <li><i data-icon="library"></i> A library of technical and STAR answers</li>
+        <li><i data-icon="target"></i> Practice that puts weak spots first</li>
+        <li><i data-icon="sparkles"></i> AI scores for clarity, structure, and specificity</li>
+      </ul>
+      <div id="google-button" class="google-button"></div>
+      <p id="login-error" class="alert error" hidden></p>
+      <p class="fine">Private workspace. Only the owner's Google account can sign in.</p>
+    </div>
   </main>
 
+  <!-- App -->
   <div id="app" hidden>
     <header class="topbar">
-      <strong class="brand">PrepLoop</strong>
-      <nav class="tabs">
-        <button class="tab active" data-view="library">Library</button>
-        <button class="tab" data-view="practice">Practice</button>
-        <button class="tab" data-view="io">Import / Export</button>
-      </nav>
-      <span class="spacer"></span>
-      <span id="user-email" class="muted small hide-narrow"></span>
-      <button id="logout" class="link">Sign out</button>
+      <div class="topbar-inner">
+        <div class="brand">
+          <span class="logo-mark sm"><i data-icon="logo"></i></span>
+          <span class="brand-name">PrepLoop</span>
+        </div>
+        <nav class="tabs" aria-label="Sections">
+          <button class="tab active" data-view="library"><i data-icon="library"></i><span>Library</span></button>
+          <button class="tab" data-view="practice"><i data-icon="target"></i><span>Practice</span></button>
+          <button class="tab" data-view="io"><i data-icon="swap"></i><span>Import / Export</span></button>
+        </nav>
+        <div class="user">
+          <span id="user-avatar" class="avatar" aria-hidden="true"></span>
+          <span id="user-email" class="user-email"></span>
+          <button id="logout" class="icon-btn" title="Sign out" aria-label="Sign out"><i data-icon="logout"></i></button>
+        </div>
+      </div>
     </header>
 
     <main class="content">
       <!-- Library -->
       <section id="view-library">
-        <div class="toolbar">
-          <input id="f-q" type="search" placeholder="Search questions, answers, notes…" maxlength="200">
+        <div class="page-head">
+          <div>
+            <h1>Question library</h1>
+            <p class="sub">Your questions and answers, ready to practice.</p>
+          </div>
+          <button id="add-btn" class="btn primary"><i data-icon="plus"></i> Add question</button>
+        </div>
+
+        <div id="lib-stats" class="stats"></div>
+
+        <div class="filters">
+          <label class="search">
+            <i data-icon="search"></i>
+            <input id="f-q" type="search" placeholder="Search questions, answers, notes…" maxlength="200" aria-label="Search">
+          </label>
           <select id="f-type" aria-label="Type">
             <option value="">All types</option>
             <option value="technical">Technical</option>
@@ -48,9 +86,9 @@
           </select>
           <select id="f-conf" aria-label="Confidence">
             <option value="">Any confidence</option>
-            <option value="1-2">Low (1–2)</option>
-            <option value="3-3">Medium (3)</option>
-            <option value="4-5">High (4–5)</option>
+            <option value="1-2">Weak (1–2)</option>
+            <option value="3-3">Okay (3)</option>
+            <option value="4-5">Strong (4–5)</option>
           </select>
           <select id="f-sort" aria-label="Sort">
             <option value="createdAt:desc">Newest first</option>
@@ -60,15 +98,22 @@
             <option value="lastPracticed:asc">Least recently practiced</option>
             <option value="lastPracticed:desc">Most recently practiced</option>
           </select>
-          <button id="add-btn" class="primary">+ Add question</button>
         </div>
-        <p id="lib-status" class="muted small"></p>
-        <div id="q-list" class="cards"></div>
+
+        <p id="lib-status" class="status-line"></p>
+        <div id="q-list" class="q-list"></div>
       </section>
 
       <!-- Practice -->
       <section id="view-practice" hidden>
-        <div class="toolbar">
+        <div class="page-head">
+          <div>
+            <h1>Practice</h1>
+            <p class="sub">Each question once per session. Weak and stale ones come first.</p>
+          </div>
+        </div>
+
+        <div class="practice-setup">
           <select id="p-type" aria-label="Type">
             <option value="">All types</option>
             <option value="technical">Technical</option>
@@ -77,60 +122,70 @@
           <select id="p-tag" aria-label="Tag">
             <option value="">All tags</option>
           </select>
-          <button id="p-start" class="primary">Start practice</button>
+          <button id="p-start" class="btn primary"><i data-icon="play"></i> Start session</button>
         </div>
 
-        <div id="p-progress" hidden>
+        <div id="p-progress" class="progress" hidden>
           <div class="progress-text">
             <strong id="p-pos"></strong>
-            <span id="p-counts" class="muted small"></span>
+            <span id="p-counts"></span>
           </div>
-          <div class="bar progress-bar"><span id="p-bar"></span></div>
+          <div class="progress-track"><span id="p-bar"></span></div>
         </div>
 
-        <p id="p-status" class="muted"></p>
+        <p id="p-status" class="status-line"></p>
 
-        <div id="p-done" class="card practice-card" hidden>
+        <div id="p-done" class="panel done" hidden>
+          <span class="done-icon"><i data-icon="trophy"></i></span>
           <h2>Session complete</h2>
           <p id="p-done-text"></p>
-          <button id="p-again" class="primary">Practice again</button>
+          <button id="p-again" class="btn primary"><i data-icon="repeat"></i> Practice again</button>
         </div>
 
-        <article id="p-card" class="card practice-card" hidden>
-          <div class="card-head">
+        <div id="p-intro" class="panel empty">
+          <span class="empty-icon"><i data-icon="target"></i></span>
+          <h3>Ready when you are</h3>
+          <p>Pick a type or tag if you like, then start a session.</p>
+        </div>
+
+        <article id="p-card" class="panel practice-card" hidden>
+          <div class="pc-head">
             <span id="p-badge" class="badge"></span>
             <span id="p-dots"></span>
             <span class="spacer"></span>
-            <button id="p-skip" class="link">Skip</button>
+            <button id="p-skip" class="btn ghost sm">Skip <i data-icon="arrow"></i></button>
           </div>
-          <h2 id="p-question" class="q-text"></h2>
+          <h2 id="p-question" class="pc-question"></h2>
           <div id="p-tags" class="tags"></div>
 
-          <details id="p-try">
-            <summary>Type a fresh answer and get AI feedback (optional)</summary>
+          <details id="p-try" class="try">
+            <summary><i data-icon="pencil"></i> Answer it in your own words first <span class="opt">optional</span></summary>
             <textarea id="p-typed" rows="5" maxlength="10000" placeholder="Answer as if you were in the interview…"></textarea>
-            <div class="fb-actions">
-              <button id="p-fb-typed">Get feedback on this</button>
-              <button id="p-save-typed" class="link" hidden>Save as my answer</button>
+            <div class="try-actions">
+              <button id="p-fb-typed" class="btn soft"><i data-icon="sparkles"></i> Get AI feedback on this</button>
+              <button id="p-save-typed" class="btn ghost" hidden><i data-icon="check"></i> Save as my answer</button>
             </div>
           </details>
 
-          <button id="p-reveal" class="primary">Reveal answer <kbd>Space</kbd></button>
+          <button id="p-reveal" class="btn primary lg reveal"><i data-icon="eye"></i> Reveal answer <kbd>Space</kbd></button>
 
           <div id="p-answer" hidden>
-            <div id="p-answer-body"></div>
-            <div id="p-last-fb"></div>
-            <button id="p-fb-saved" class="link">Get AI feedback on my saved answer</button>
+            <div class="section-label">Your saved answer</div>
+            <div id="p-answer-body" class="answer-box"></div>
+            <div class="pc-ai">
+              <div id="p-last-fb"></div>
+              <button id="p-fb-saved" class="btn soft sm"><i data-icon="sparkles"></i> <span>Get AI feedback</span></button>
+            </div>
             <div class="rate">
-              <p class="small muted">How confident do you feel now?</p>
+              <div class="section-label">How confident do you feel now?</div>
               <div class="rate-buttons">
-                <button data-rate="1">1</button>
-                <button data-rate="2">2</button>
-                <button data-rate="3">3</button>
-                <button data-rate="4">4</button>
-                <button data-rate="5">5</button>
+                <button data-rate="1" class="r1"><b>1</b><span>Lost</span></button>
+                <button data-rate="2" class="r2"><b>2</b><span>Shaky</span></button>
+                <button data-rate="3" class="r3"><b>3</b><span>Okay</span></button>
+                <button data-rate="4" class="r4"><b>4</b><span>Good</span></button>
+                <button data-rate="5" class="r5"><b>5</b><span>Nailed it</span></button>
               </div>
-              <p class="small muted kbd-hint">Keys 1–5 work too.</p>
+              <p class="kbd-hint">Press <kbd>1</kbd> to <kbd>5</kbd></p>
             </div>
           </div>
 
@@ -140,32 +195,59 @@
 
       <!-- Import / Export -->
       <section id="view-io" hidden>
-        <div class="card io-card">
-          <h3>Import</h3>
-          <p class="small muted">
-            JSON or CSV, up to 1 MB. Questions that already exist (same text) are skipped.
-          </p>
-          <div class="io-row">
-            <input id="import-file" type="file" accept=".json,.csv,application/json,text/csv">
-            <button id="import-btn" class="primary">Import</button>
+        <div class="page-head">
+          <div>
+            <h1>Import &amp; export</h1>
+            <p class="sub">Bring questions in from a spreadsheet, or take a full backup.</p>
           </div>
-          <div id="import-result" class="small" hidden></div>
-          <details class="small">
-            <summary>CSV format</summary>
-            <p>Header row with these columns. Tags are separated by <code>;</code>, confidence is 1 to 5 (blank = 3).</p>
-            <pre>type,question,answer,tags,confidence
-technical,What is RAG?,Retrieval plus generation,RAG;LLM,2
-behavioral,Tell me about a conflict,"I talked to them, then...",leadership,3</pre>
-            <p>Optional columns: notes, situation, task, action, result. An exported CSV can be imported back as is.</p>
-          </details>
         </div>
 
-        <div class="card io-card">
-          <h3>Export</h3>
-          <p class="small muted">Download everything, including STAR notes and practice stats.</p>
-          <div class="io-row">
-            <a class="button" href="/api/export?format=json" download>Download JSON</a>
-            <a class="button" href="/api/export?format=csv" download>Download CSV</a>
+        <div class="io-grid">
+          <div class="panel">
+            <div class="panel-head">
+              <span class="tile-icon"><i data-icon="upload"></i></span>
+              <div>
+                <h3>Import</h3>
+                <p class="sub">JSON or CSV, up to 1 MB. Questions you already have are skipped.</p>
+              </div>
+            </div>
+            <label id="dropzone" class="dropzone" for="import-file">
+              <i data-icon="file"></i>
+              <span id="import-filename"><strong>Choose a file</strong> or drag it here</span>
+              <input id="import-file" class="visually-hidden" type="file" accept=".json,.csv,application/json,text/csv">
+            </label>
+            <button id="import-btn" class="btn primary full">Import questions</button>
+            <div id="import-result" hidden></div>
+            <details class="help">
+              <summary>CSV format</summary>
+              <p>A header row with these columns. Separate tags with <code>;</code>. Confidence is 1 to 5 (blank means 3).</p>
+              <pre>type,question,answer,tags,confidence
+technical,What is RAG?,Retrieval plus generation,RAG;LLM,2
+behavioral,Tell me about a conflict,"I talked to them, then...",leadership,3</pre>
+              <p>Optional columns: notes, situation, task, action, result. An exported CSV can be imported back as is.</p>
+            </details>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <span class="tile-icon"><i data-icon="download"></i></span>
+              <div>
+                <h3>Export</h3>
+                <p class="sub">Everything, including STAR notes and practice stats.</p>
+              </div>
+            </div>
+            <div class="export-options">
+              <a class="export-option" href="/api/export?format=json" download>
+                <span class="ext">JSON</span>
+                <span><strong>Full backup</strong><span class="sub">Best for restoring later</span></span>
+                <i data-icon="download"></i>
+              </a>
+              <a class="export-option" href="/api/export?format=csv" download>
+                <span class="ext">CSV</span>
+                <span><strong>Spreadsheet</strong><span class="sub">Open in Excel or Google Sheets</span></span>
+                <i data-icon="download"></i>
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -173,65 +255,88 @@ behavioral,Tell me about a conflict,"I talked to them, then...",leadership,3</pr
   </div>
 
   <!-- AI feedback for a library question -->
-  <dialog id="fb-dialog">
-    <h2>AI feedback</h2>
-    <p id="fb-dialog-question" class="muted"></p>
-    <div id="fb-dialog-body" class="feedback"></div>
-    <div class="actions">
-      <button id="fb-dialog-close">Close</button>
+  <dialog id="fb-dialog" class="modal wide">
+    <div class="modal-head">
+      <div>
+        <div class="eyebrow"><i data-icon="sparkles"></i> AI feedback</div>
+        <h2 id="fb-dialog-question"></h2>
+      </div>
+      <button id="fb-dialog-close" class="icon-btn" aria-label="Close"><i data-icon="x"></i></button>
     </div>
+    <div id="fb-dialog-body" class="feedback"></div>
   </dialog>
 
   <!-- Add / edit question -->
-  <dialog id="q-dialog">
+  <dialog id="q-dialog" class="modal">
     <form id="q-form">
-      <h2 id="q-form-title">Add question</h2>
+      <div class="modal-head">
+        <h2 id="q-form-title">Add question</h2>
+        <button type="button" id="q-close" class="icon-btn" aria-label="Close"><i data-icon="x"></i></button>
+      </div>
 
       <div class="row">
-        <label>Type
+        <label class="field">Type
           <select name="type">
             <option value="technical">Technical</option>
             <option value="behavioral">Behavioral</option>
           </select>
         </label>
-        <label>Confidence
+        <label class="field">Confidence
           <select name="confidence">
-            <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option>
+            <option value="1">1 · Lost</option>
+            <option value="2">2 · Shaky</option>
+            <option value="3" selected>3 · Okay</option>
+            <option value="4">4 · Good</option>
+            <option value="5">5 · Nailed it</option>
           </select>
         </label>
       </div>
 
-      <label>Question
-        <textarea name="question" rows="2" maxlength="2000" required></textarea>
+      <label class="field">Question
+        <textarea name="question" rows="2" maxlength="2000" required placeholder="e.g. Tell me about a time you disagreed with your manager."></textarea>
       </label>
 
-      <label>My answer
-        <textarea name="answer" rows="6" maxlength="10000"></textarea>
+      <label class="field">My answer
+        <textarea name="answer" rows="6" maxlength="10000" placeholder="Write it the way you'd say it out loud."></textarea>
       </label>
 
-      <fieldset id="star-fields">
-        <legend>STAR (optional)</legend>
-        <label>Situation <textarea name="situation" rows="2" maxlength="4000"></textarea></label>
-        <label>Task <textarea name="task" rows="2" maxlength="4000"></textarea></label>
-        <label>Action <textarea name="action" rows="2" maxlength="4000"></textarea></label>
-        <label>Result <textarea name="result" rows="2" maxlength="4000"></textarea></label>
+      <fieldset id="star-fields" class="star-fields">
+        <legend>STAR breakdown <span class="opt">optional</span></legend>
+        <div class="star-grid">
+          <label class="field">Situation <textarea name="situation" rows="2" maxlength="4000"></textarea></label>
+          <label class="field">Task <textarea name="task" rows="2" maxlength="4000"></textarea></label>
+          <label class="field">Action <textarea name="action" rows="2" maxlength="4000"></textarea></label>
+          <label class="field">Result <textarea name="result" rows="2" maxlength="4000"></textarea></label>
+        </div>
       </fieldset>
 
-      <label>Tags <span class="muted small">(comma separated)</span>
+      <label class="field">Tags <span class="hint">comma separated</span>
         <input name="tags" placeholder="RAG, AWS, leadership" maxlength="900">
       </label>
 
-      <label>Notes
+      <label class="field">Notes
         <textarea name="notes" rows="2" maxlength="4000"></textarea>
       </label>
 
-      <p id="q-form-error" class="error" hidden></p>
+      <p id="q-form-error" class="alert error" hidden></p>
 
-      <div class="actions">
-        <button type="button" id="q-cancel">Cancel</button>
-        <button type="submit" class="primary">Save</button>
+      <div class="modal-actions">
+        <button type="button" id="q-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" class="btn primary">Save question</button>
       </div>
     </form>
   </dialog>
+
+  <!-- Confirm (replaces the browser's confirm box) -->
+  <dialog id="confirm-dialog" class="modal small">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-text" class="sub"></p>
+    <div class="modal-actions">
+      <button id="confirm-cancel" class="btn ghost">Cancel</button>
+      <button id="confirm-ok" class="btn primary"></button>
+    </div>
+  </dialog>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
 </body>
 </html>
