@@ -153,8 +153,11 @@ def _readable_error(e: ClientError) -> FeedbackError:
     if code == "ThrottlingException":
         return FeedbackError(429, "Bedrock is busy right now (throttled). Wait a moment and try again.")
     if code == "AccessDeniedException":
+        # AWS's own reason is often the useful part (e.g. account still being verified).
+        aws_says = e.response.get("Error", {}).get("Message", "")
         return FeedbackError(502, f"Bedrock denied access to {model_id()}. Check that model access is "
-                                  "enabled in the Bedrock console and the IAM policy allows this model.")
+                                  "enabled in the Bedrock console and the IAM policy allows this model. "
+                                  f"AWS says: {aws_says}".strip())
     if code in ("ResourceNotFoundException", "ValidationException"):
         return FeedbackError(502, f"Model {model_id()} isn't available in {region}. Check FEEDBACK_MODEL_ID "
                                   "(it may need an inference profile ID like us.amazon.nova-lite-v1:0).")
