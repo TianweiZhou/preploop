@@ -24,6 +24,23 @@ Parameters:
     Default: /preploop/jwt-secret
     AllowedPattern: "^/[a-zA-Z0-9_./-]+$"
     Description: Name of the SSM SecureString parameter holding the session signing key (create it first).
+  DomainName:
+    Type: String
+    Default: ""
+    Description: Optional custom domain, e.g. prep.joemakes.ca. Leave empty to use only the Function URL. Needs the stack in us-east-1.
+  HostedZoneId:
+    Type: String
+    Default: ""
+    Description: Route 53 hosted zone ID for the domain's parent (e.g. joemakes.ca). Required when DomainName is set.
+  ReservedConcurrency:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    Description: Max copies of the function running at once (caps worst-case cost). 0 = no cap. Needs an account limit above 10.
+
+Conditions:
+  HasDomain: !Not [!Equals [!Ref DomainName, ""]]
+  HasConcurrencyCap: !Not [!Equals [!Ref ReservedConcurrency, 0]]
 
 Resources:
   QuestionsTable:
@@ -49,6 +66,7 @@ Resources:
       Architectures: [arm64]
       MemorySize: 512
       Timeout: 60 # Bedrock can be slow
+      ReservedConcurrentExecutions: !If [HasConcurrencyCap, !Ref ReservedConcurrency, !Ref AWS::NoValue]
       FunctionUrlConfig:
         AuthType: NONE # the app does its own auth (Google sign-in + session cookie)
       Environment:
@@ -94,6 +112,70 @@ Resources:
       Principal: "*"
       InvokedViaFunctionUrl: true
 
+  # ---- Custom domain (only when DomainName is set) ----
+  # Function URLs can't take a custom domain, so CloudFront sits in front.
+
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: HasDomain
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      # CloudFormation adds the validation record to the hosted zone itself.
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Condition: HasDomain
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub ${AWS::StackName} app
+        Aliases: [!Ref DomainName]
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100 # North America and Europe edges, cheapest
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Origins:
+          - Id: app
+            # "https://abc.lambda-url.us-east-1.on.aws/" -> "abc.lambda-url.us-east-1.on.aws"
+            DomainName: !Select [2, !Split ["/", !GetAtt AppFunctionUrl.FunctionUrl]]
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+              OriginReadTimeout: 60 # default is 30; Bedrock calls can take longer
+        DefaultCacheBehavior:
+          TargetOriginId: app
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # AWS managed policies:
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # CachingDisabled (API responses are per user)
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # AllViewerExceptHostHeader (Function URLs reject other Host headers)
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03 # SecurityHeadersPolicy (HSTS, nosniff, frame options)
+
+  DnsRecords:
+    Type: AWS::Route53::RecordSetGroup
+    Condition: HasDomain
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      RecordSets:
+        - Name: !Ref DomainName
+          Type: A
+          AliasTarget:
+            DNSName: !GetAtt Distribution.DomainName
+            HostedZoneId: Z2FDTNDATAQYW2 # fixed zone ID for all CloudFront distributions
+        - Name: !Ref DomainName
+          Type: AAAA
+          AliasTarget:
+            DNSName: !GetAtt Distribution.DomainName
+            HostedZoneId: Z2FDTNDATAQYW2
+
 Outputs:
   FunctionUrl:
     Description: App URL. Add it (without the trailing slash) to the Google OAuth client's JavaScript origins.
@@ -101,3 +183,11 @@ Outputs:
   TableName:
     Description: DynamoDB table name (for the seed script).
     Value: !Ref QuestionsTable
+  AppUrl:
+    Condition: HasDomain
+    Description: Custom domain URL. Add it to the Google OAuth client's JavaScript origins.
+    Value: !Sub https://${DomainName}
+  CloudFrontDomain:
+    Condition: HasDomain
+    Description: CloudFront domain behind the custom domain.
+    Value: !GetAtt Distribution.DomainName

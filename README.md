@@ -429,6 +429,56 @@ Do this only after phase 1 works on the Function URL.
 - Add `https://prep.joemakes.ca` to the Google OAuth authorized JavaScript origins
 - Walk me through each manual DNS record step by step
 
+**Decision: option B (Route 53).** `joemakes.ca` was brand new with nothing else on it, so moving its DNS cost nothing, and Route 53 lets the template create the certificate validation record and the `prep` alias automatically. The hosted zone is created once by hand, outside the app stack, so `sam delete` never removes it (which would change the nameservers).
+
+What the template adds when `DomainName` is set:
+- ACM certificate for the domain, validated automatically through Route 53
+- CloudFront in front of the Function URL: no caching (every response is per user), all methods, cookies, and query strings passed through, the `Host` header not forwarded (Function URLs reject it), 60 s origin timeout for slow Bedrock calls, AWS managed security headers (HSTS etc.)
+- Route 53 `A` and `AAAA` alias records pointing the domain at CloudFront
+
+### Custom domain step by step
+
+1. Create the hosted zone (once):
+
+   ```bash
+   aws route53 create-hosted-zone --profile dev --name joemakes.ca --caller-reference "joemakes-$(date +%s)" --query '[HostedZone.Id, DelegationSet.NameServers]'
+   ```
+
+   Note the zone ID (the part after `/hostedzone/`, like `Z0123456789ABC`) and the 4 nameservers.
+
+2. In Namecheap: Domain List > `joemakes.ca` > Manage > Nameservers > **Custom DNS**. Enter the 4 AWS nameservers (without the trailing dot) and save.
+
+3. Wait until the switch is visible (usually minutes, can take a few hours). This must show the AWS nameservers before you deploy, or certificate validation will hang:
+
+   ```bash
+   dig NS joemakes.ca +short
+   ```
+
+4. Deploy with the two new parameters. `--guided` re-asks every parameter with your saved answers as defaults, so press Enter for the old ones and fill in:
+   - `DomainName`: `prep.joemakes.ca`
+   - `HostedZoneId`: the zone ID from step 1
+   - `ReservedConcurrency`: Enter (keeps `0`, see below)
+
+   ```bash
+   sam build && sam deploy --guided --profile dev
+   ```
+
+   The certificate and CloudFront take about 5 to 15 minutes.
+
+5. In Google Auth Platform > Clients > your client, add `https://prep.joemakes.ca` to **Authorized JavaScript origins**. Keep the Function URL origin too.
+
+6. Check it, then open https://prep.joemakes.ca and sign in:
+
+   ```bash
+   curl -s https://prep.joemakes.ca/api/health
+   ```
+
+The Function URL keeps working too. That's fine: every data route needs the signed session cookie either way.
+
+### Concurrency cap
+
+`ReservedConcurrency` caps how many copies of the function run at once, which caps worst-case cost if someone floods the URL. New AWS accounts have an account-wide limit of 10, and AWS requires 10 to stay unreserved, so the cap can't be set yet (the low account limit already acts as a cap). Once the account limit is raised (it grows with usage, or request 1000 in Service Quotas > AWS Lambda > Concurrent executions), redeploy with `ReservedConcurrency=10`.
+
 ---
 
 ## Security checklist
