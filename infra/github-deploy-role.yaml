@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  IAM role that GitHub Actions assumes (via OIDC, no stored keys) to deploy PrepLoop.
+  Deploy this once by hand. It lives outside the app stack so the app can't change its own deploy permissions.
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: TianweiZhou/preploop
+    Description: owner/repo allowed to assume the role.
+  Branch:
+    Type: String
+    Default: main
+    Description: Only workflows running on this branch can deploy.
+  AppStackName:
+    Type: String
+    Default: preploop
+    Description: The app's stack name. The role may only manage IAM roles named <AppStackName>-*.
+  CreateOidcProvider:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+    Description: Set to true if the account has no token.actions.githubusercontent.com OIDC provider yet (one per account).
+
+Conditions:
+  ShouldCreateProvider: !Equals [!Ref CreateOidcProvider, "true"]
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: ShouldCreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      # Deliberately not named "<AppStackName>-..." so the role can't edit itself.
+      RoleName: !Sub github-deploy-${AppStackName}
+      Description: !Sub Deploys the ${AppStackName} SAM stack from GitHub Actions (${GitHubRepo}, ${Branch} branch only)
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                # Only pushes/runs on this repo's branch, not PRs or forks.
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepo}:ref:refs/heads/${Branch}
+      ManagedPolicyArns:
+        # CloudFormation, Lambda, S3 (SAM artifacts), DynamoDB, CloudFront, ACM, Route 53.
+        # PowerUserAccess excludes IAM, which is granted narrowly below.
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/PowerUserAccess
+      Policies:
+        - PolicyName: manage-app-roles
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # SAM creates the Lambda's execution role (named "<stack>-AppFunctionRole-...").
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListRoleTags
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppStackName}-*
+              # The only managed policy SAM attaches is basic Lambda logging.
+              - Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppStackName}-*
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN: !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+Outputs:
+  DeployRoleArn:
+    Description: Put this in the GitHub secret AWS_DEPLOY_ROLE_ARN.
+    Value: !GetAtt DeployRole.Arn

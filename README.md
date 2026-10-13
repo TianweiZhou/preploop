@@ -403,10 +403,48 @@ This deletes the table too, so export your data first (Import / Export tab). The
 
 ---
 
+## CI/CD (GitHub Actions)
+
+`.github/workflows/ci-cd.yml`:
+- **Every push and pull request:** install deps, run `pytest`, run `sam validate --lint`. No AWS access needed (tests use moto and a fake Bedrock).
+- **Push to `main` (after tests pass):** `sam build` + `sam deploy` to the `preploop` stack, then a health check on the live URL. Deploys never overlap. The **Run workflow** button on the Actions tab redeploys `main` by hand.
+
+AWS access uses **OIDC**: GitHub proves the job is from this repo's `main` branch and AWS returns short-lived credentials. No AWS keys are stored in GitHub. The deploy role (`infra/github-deploy-role.yaml`) trusts only `repo:TianweiZhou/preploop:ref:refs/heads/main`, has `PowerUserAccess`, and can only manage IAM roles named `preploop-*` (attaching nothing but the basic Lambda logging policy). It's named `github-deploy-preploop` so it can't edit itself.
+
+### One-time setup
+
+1. Create the deploy role. The account already has GitHub's OIDC provider, so `CreateOidcProvider` stays `false` (set it to `true` in an account that doesn't):
+
+   ```bash
+   aws cloudformation deploy --profile dev --region us-east-1 --stack-name github-deploy-preploop --template-file infra/github-deploy-role.yaml --capabilities CAPABILITY_NAMED_IAM
+   ```
+
+2. Get the role ARN:
+
+   ```bash
+   aws cloudformation describe-stacks --profile dev --region us-east-1 --stack-name github-deploy-preploop --query "Stacks[0].Outputs[0].OutputValue" --output text
+   ```
+
+3. In GitHub: repo > Settings > Secrets and variables > Actions. The repo is public, so personal values are **secrets** (masked in logs).
+
+   | Type | Name | Value |
+   |---|---|---|
+   | Secret | `AWS_DEPLOY_ROLE_ARN` | ARN from step 2 |
+   | Secret | `GOOGLE_CLIENT_ID` | Google OAuth Client ID |
+   | Secret | `ALLOWED_EMAIL` | your Google email |
+   | Secret | `HOSTED_ZONE_ID` | Route 53 zone ID for the domain |
+   | Variable | `DOMAIN_NAME` | `prep.joemakes.ca` |
+   | Variable (optional) | `FEEDBACK_MODEL_ID` | defaults to `us.amazon.nova-lite-v1:0` |
+   | Variable (optional) | `RESERVED_CONCURRENCY` | defaults to `0` |
+
+From then on, `git push` to `main` is the deploy. Changing a setting (e.g. switching to Claude) means changing the GitHub variable and clicking **Run workflow**, not `sam deploy --guided`, otherwise the next push would set it back.
+
+---
+
 ## Switching to Claude later
 
 1. Enable Claude model access in the Bedrock console
-2. Update the `FeedbackModelId` parameter to the Claude model or inference profile ID
+2. Update the `FeedbackModelId` parameter to the Claude model or inference profile ID (with CI/CD: the `FEEDBACK_MODEL_ID` GitHub variable, then **Run workflow**)
 3. Update the IAM policy resource if needed (the template should derive it from the parameter)
 4. `sam deploy`
 
