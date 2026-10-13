@@ -22,14 +22,112 @@
 
   <div id="app" hidden>
     <header class="topbar">
-      <strong>PrepLoop</strong>
+      <strong class="brand">PrepLoop</strong>
+      <nav class="tabs">
+        <button class="tab active" data-view="library">Library</button>
+        <button class="tab" data-view="practice">Practice</button>
+        <button class="tab" data-view="io">Import / Export</button>
+      </nav>
       <span class="spacer"></span>
-      <span id="user-email" class="muted small"></span>
+      <span id="user-email" class="muted small hide-narrow"></span>
       <button id="logout" class="link">Sign out</button>
     </header>
+
     <main class="content">
-      <p class="muted">Signed in. The library comes in the next step.</p>
+      <!-- Library -->
+      <section id="view-library">
+        <div class="toolbar">
+          <input id="f-q" type="search" placeholder="Search questions, answers, notes…" maxlength="200">
+          <select id="f-type" aria-label="Type">
+            <option value="">All types</option>
+            <option value="technical">Technical</option>
+            <option value="behavioral">Behavioral</option>
+          </select>
+          <select id="f-tag" aria-label="Tag">
+            <option value="">All tags</option>
+          </select>
+          <select id="f-conf" aria-label="Confidence">
+            <option value="">Any confidence</option>
+            <option value="1-2">Low (1–2)</option>
+            <option value="3-3">Medium (3)</option>
+            <option value="4-5">High (4–5)</option>
+          </select>
+          <select id="f-sort" aria-label="Sort">
+            <option value="createdAt:desc">Newest first</option>
+            <option value="createdAt:asc">Oldest first</option>
+            <option value="confidence:asc">Lowest confidence</option>
+            <option value="confidence:desc">Highest confidence</option>
+            <option value="lastPracticed:asc">Least recently practiced</option>
+            <option value="lastPracticed:desc">Most recently practiced</option>
+          </select>
+          <button id="add-btn" class="primary">+ Add question</button>
+        </div>
+        <p id="lib-status" class="muted small"></p>
+        <div id="q-list" class="cards"></div>
+      </section>
+
+      <!-- Practice (step 5) -->
+      <section id="view-practice" hidden>
+        <p class="muted">Practice mode is coming soon.</p>
+      </section>
+
+      <!-- Import / Export (step 7) -->
+      <section id="view-io" hidden>
+        <p class="muted">Import and export are coming soon.</p>
+      </section>
     </main>
   </div>
+
+  <!-- Add / edit question -->
+  <dialog id="q-dialog">
+    <form id="q-form">
+      <h2 id="q-form-title">Add question</h2>
+
+      <div class="row">
+        <label>Type
+          <select name="type">
+            <option value="technical">Technical</option>
+            <option value="behavioral">Behavioral</option>
+          </select>
+        </label>
+        <label>Confidence
+          <select name="confidence">
+            <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option>
+          </select>
+        </label>
+      </div>
+
+      <label>Question
+        <textarea name="question" rows="2" maxlength="2000" required></textarea>
+      </label>
+
+      <label>My answer
+        <textarea name="answer" rows="6" maxlength="10000"></textarea>
+      </label>
+
+      <fieldset id="star-fields">
+        <legend>STAR (optional)</legend>
+        <label>Situation <textarea name="situation" rows="2" maxlength="4000"></textarea></label>
+        <label>Task <textarea name="task" rows="2" maxlength="4000"></textarea></label>
+        <label>Action <textarea name="action" rows="2" maxlength="4000"></textarea></label>
+        <label>Result <textarea name="result" rows="2" maxlength="4000"></textarea></label>
+      </fieldset>
+
+      <label>Tags <span class="muted small">(comma separated)</span>
+        <input name="tags" placeholder="RAG, AWS, leadership" maxlength="900">
+      </label>
+
+      <label>Notes
+        <textarea name="notes" rows="2" maxlength="4000"></textarea>
+      </label>
+
+      <p id="q-form-error" class="error" hidden></p>
+
+      <div class="actions">
+        <button type="button" id="q-cancel">Cancel</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>
