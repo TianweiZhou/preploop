@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: PrepLoop, a personal interview prep app (FastAPI on Lambda + DynamoDB + Bedrock)
+
+Parameters:
+  FeedbackModelId:
+    Type: String
+    Default: us.amazon.nova-lite-v1:0
+    Description: Bedrock model ID or cross-region inference profile ID used for AI feedback.
+  BedrockRegion:
+    Type: String
+    Default: us-east-1
+    Description: Region to call Bedrock in. The inference profile must exist in this region.
+  GoogleClientId:
+    Type: String
+    AllowedPattern: ".+\\.apps\\.googleusercontent\\.com"
+    Description: Google OAuth Web client ID (public, not a secret).
+  AllowedEmail:
+    Type: String
+    AllowedPattern: ".+@.+"
+    Description: The only Google account allowed to sign in.
+  JwtSecretParam:
+    Type: String
+    Default: /preploop/jwt-secret
+    AllowedPattern: "^/[a-zA-Z0-9_./-]+$"
+    Description: Name of the SSM SecureString parameter holding the session signing key (create it first).
+
+Resources:
+  QuestionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+
+  AppFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: app.main.handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 60 # Bedrock can be slow
+      FunctionUrlConfig:
+        AuthType: NONE # the app does its own auth (Google sign-in + session cookie)
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref QuestionsTable
+          FEEDBACK_MODEL_ID: !Ref FeedbackModelId
+          BEDROCK_REGION: !Ref BedrockRegion
+          GOOGLE_CLIENT_ID: !Ref GoogleClientId
+          ALLOWED_EMAIL: !Ref AllowedEmail
+          JWT_SECRET_PARAM: !Ref JwtSecretParam
+      Policies:
+        # Read/write on this one table only.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref QuestionsTable
+        - Version: "2012-10-17"
+          Statement:
+            # The JWT signing key. The default aws/ssm KMS key needs no extra permission.
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${JwtSecretParam}
+            # The chosen model: either a plain model ID or an inference profile ID.
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:${BedrockRegion}:${AWS::AccountId}:inference-profile/${FeedbackModelId}
+                - !Sub arn:${AWS::Partition}:bedrock:${BedrockRegion}::foundation-model/${FeedbackModelId}
+            # Cross-region profiles route to the underlying model in several regions.
+            # Allow that, but only when the call goes through our profile.
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/*
+              Condition:
+                StringLike:
+                  bedrock:InferenceProfileArn: !Sub arn:${AWS::Partition}:bedrock:${BedrockRegion}:${AWS::AccountId}:inference-profile/${FeedbackModelId}
+
+  # Since Oct 2025, public function URLs also need lambda:InvokeFunction.
+  # SAM adds lambda:InvokeFunctionUrl itself; this covers the second one.
+  AppFunctionUrlInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AppFunction
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+Outputs:
+  FunctionUrl:
+    Description: App URL. Add it (without the trailing slash) to the Google OAuth client's JavaScript origins.
+    Value: !GetAtt AppFunctionUrl.FunctionUrl
+  TableName:
+    Description: DynamoDB table name (for the seed script).
+    Value: !Ref QuestionsTable

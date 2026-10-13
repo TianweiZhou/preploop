@@ -87,20 +87,19 @@ source .venv/bin/activate
 pip install -r backend/requirements-dev.txt
 ```
 
-Create your local settings (gitignored) and fill in the placeholders:
+Create your local settings in the repo root (gitignored) and fill in the placeholders. It lives outside `backend/` so `sam build` never packages it.
 
 ```bash
-cp backend/.env.example backend/.env
+cp .env.example .env
 ```
 
 Sign-in needs a Google OAuth Client ID even locally (see "Google Cloud setup" below). For local dev, add **both** `http://localhost` and `http://localhost:8000` as Authorized JavaScript origins.
 
-Run the app (from `backend/`):
+Run the app (from the repo root):
 
 ```bash
-cd backend
 set -a; source .env; set +a
-uvicorn app.main:app --reload --port 8000
+cd backend && uvicorn app.main:app --reload --port 8000
 ```
 
 Open http://localhost:8000 (port 8000 matches the Google OAuth origin). Health check: http://localhost:8000/api/health
@@ -215,7 +214,7 @@ Notes:
 
 One DynamoDB table, on-demand billing. The dataset is small (hundreds of items), so a full `Scan` plus filtering in Python is fine. Don't over-design the keys.
 
-Table: `InterviewPrepTable`
+Table: named by CloudFormation (see the `TableName` stack output) instead of a fixed `InterviewPrepTable`, so names never clash.
 - Partition key: `pk` (string), e.g. `Q#<uuid>`
 
 Item attributes:
@@ -326,10 +325,76 @@ sam deploy              # after that
 
 After the first deploy: copy the Function URL, add it to the Google OAuth client's authorized JavaScript origins, then test sign-in.
 
+### Deploy step by step (first time)
+
+Replace `dev` with your AWS CLI profile and `us-east-1` with your region. Stack, SSM parameter, and Bedrock region should all be the same region.
+
+1. Create the JWT signing key in SSM (once). The value is generated on the fly and never printed or saved:
+
+   ```bash
+   aws ssm put-parameter --profile dev --region us-east-1 --name /preploop/jwt-secret --type SecureString --value "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+   ```
+
+2. Build (from the repo root):
+
+   ```bash
+   sam build
+   ```
+
+3. Deploy with prompts:
+
+   ```bash
+   sam deploy --guided --profile dev
+   ```
+
+   Answers:
+
+   | Prompt | Answer |
+   |---|---|
+   | Stack Name | `preploop` |
+   | AWS Region | `us-east-1` |
+   | Parameter FeedbackModelId | Enter (keeps `us.amazon.nova-lite-v1:0`) |
+   | Parameter BedrockRegion | Enter (keeps `us-east-1`) |
+   | Parameter GoogleClientId | your Client ID (`...apps.googleusercontent.com`) |
+   | Parameter AllowedEmail | your Google email |
+   | Parameter JwtSecretParam | Enter (keeps `/preploop/jwt-secret`) |
+   | Confirm changes before deploy | `y` |
+   | Allow SAM CLI IAM role creation | `y` |
+   | Disable rollback | `n` |
+   | AppFunction Function Url has no authentication. Is this okay? | `y` (the app checks the Google sign-in itself) |
+   | Save arguments to configuration file | `y` |
+   | SAM configuration file / environment | Enter, Enter |
+
+   Then type `y` at "Deploy this changeset?". Your answers go to `samconfig.toml` (gitignored), so later deploys are just `sam build && sam deploy`.
+
+4. Copy `FunctionUrl` from the outputs. In Google Auth Platform > Clients > your client, add it to **Authorized JavaScript origins without the trailing slash**, e.g. `https://abc123.lambda-url.us-east-1.on.aws`. Wait a few minutes.
+
+5. Check it:
+
+   ```bash
+   curl -s https://YOUR-FUNCTION-URL/api/health
+   ```
+
+   Then open the URL and sign in.
+
+6. Optional sample questions (`TableName` is in the outputs):
+
+   ```bash
+   AWS_PROFILE=dev AWS_REGION=us-east-1 .venv/bin/python scripts/seed_sample_data.py YOUR-TABLE-NAME
+   ```
+
+Logs if something breaks:
+
+```bash
+sam logs --stack-name preploop --name AppFunction --profile dev --tail
+```
+
 ### Tear down
 ```bash
 sam delete
 ```
+
+This deletes the table too, so export your data first (Import / Export tab). The SSM parameter isn't part of the stack; delete it separately if you want.
 
 ---
 
