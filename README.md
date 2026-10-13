@@ -409,7 +409,7 @@ This deletes the table too, so export your data first (Import / Export tab). The
 - **Every push and pull request:** install deps, run `pytest`, run `sam validate --lint`. No AWS access needed (tests use moto and a fake Bedrock).
 - **Push to `main` (after tests pass):** `sam build` + `sam deploy` to the `preploop` stack, then a health check on the live URL. Deploys never overlap. The **Run workflow** button on the Actions tab redeploys `main` by hand.
 
-AWS access uses **OIDC**: GitHub proves the job is from this repo's `main` branch and AWS returns short-lived credentials. No AWS keys are stored in GitHub. The deploy role (`infra/github-deploy-role.yaml`) trusts only `repo:TianweiZhou/preploop:ref:refs/heads/main`, has `PowerUserAccess`, and can only manage IAM roles named `preploop-*` (attaching nothing but the basic Lambda logging policy). It's named `github-deploy-preploop` so it can't edit itself.
+AWS access uses **OIDC**: GitHub proves the job is from this repo's `main` branch and AWS returns short-lived credentials. No AWS keys are stored in GitHub. The deploy role (`infra/github-deploy-role.yaml`) trusts only `repo:TianweiZhou@43148828/preploop@1417624262:ref:refs/heads/main` (GitHub's immutable subject format: owner and repo IDs, so a renamed or re-created repo with the same name can't use it), has `PowerUserAccess`, and can only manage IAM roles named `preploop-*` (attaching nothing but the basic Lambda logging policy). It's named `github-deploy-preploop` so it can't edit itself.
 
 ### One-time setup
 

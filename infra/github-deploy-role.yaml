@@ -6,8 +6,11 @@ Description: >
 Parameters:
   GitHubRepo:
     Type: String
-    Default: TianweiZhou/preploop
-    Description: owner/repo allowed to assume the role.
+    # New repos put immutable IDs in the OIDC subject ("owner@id/repo@id"), so a renamed
+    # or re-created repo with the same name can't take over. Look it up with:
+    #   gh api repos/OWNER/REPO/actions/oidc/customization/sub   (sub_claim_prefix, minus "repo:")
+    Default: TianweiZhou@43148828/preploop@1417624262
+    Description: The repo as it appears in GitHub's OIDC subject claim (owner@id/repo@id for new repos).
   Branch:
     Type: String
     Default: main
