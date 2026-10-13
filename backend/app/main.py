@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from mangum import Mangum
 
 from app import auth, db
-from app.routes import practice, questions
+from app.routes import feedback, practice, questions
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -20,7 +20,13 @@ if os.environ.get("LOCAL_MOCK_DB") == "1":
 
     os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
     os.environ.setdefault("TABLE_NAME", "PrepLoopLocal")
-    mock_aws().start()
+    # Bedrock calls still go to real AWS. Use real credentials only if AWS_PROFILE is set.
+    mock_aws(config={"core": {
+        "mock_credentials": not os.environ.get("AWS_PROFILE"),
+        "passthrough": {"urls": [r"https://bedrock-runtime\..*"], "services": []},
+        "reset_boto3_session": True,
+        "service_whitelist": None,
+    }}).start()
     db.create_table(os.environ["TABLE_NAME"])
 
 # No docs UI in production, this is a private app.
@@ -30,6 +36,7 @@ app.include_router(auth.router)
 protected = [Depends(auth.require_user)]
 app.include_router(questions.router, dependencies=protected)
 app.include_router(practice.router, dependencies=protected)
+app.include_router(feedback.router, dependencies=protected)
 
 
 @app.get("/api/health")

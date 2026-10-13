@@ -94,10 +94,20 @@
           <h2 id="p-question" class="q-text"></h2>
           <div id="p-tags" class="tags"></div>
 
+          <details id="p-try">
+            <summary>Type a fresh answer and get AI feedback (optional)</summary>
+            <textarea id="p-typed" rows="5" maxlength="10000" placeholder="Answer as if you were in the interview…"></textarea>
+            <div class="fb-actions">
+              <button id="p-fb-typed">Get feedback on this</button>
+              <button id="p-save-typed" class="link" hidden>Save as my answer</button>
+            </div>
+          </details>
+
           <button id="p-reveal" class="primary">Reveal answer <kbd>Space</kbd></button>
 
           <div id="p-answer" hidden>
             <div id="p-answer-body"></div>
+            <button id="p-fb-saved" class="link">Get AI feedback on my saved answer</button>
             <div class="rate">
               <p class="small muted">How confident do you feel now?</p>
               <div class="rate-buttons">
@@ -110,6 +120,8 @@
               <p class="small muted kbd-hint">Keys 1–5 work too.</p>
             </div>
           </div>
+
+          <div id="p-feedback" class="feedback" hidden></div>
         </article>
       </section>
 
@@ -119,6 +131,16 @@
       </section>
     </main>
   </div>
+
+  <!-- AI feedback for a library question -->
+  <dialog id="fb-dialog">
+    <h2>AI feedback</h2>
+    <p id="fb-dialog-question" class="muted"></p>
+    <div id="fb-dialog-body" class="feedback"></div>
+    <div class="actions">
+      <button id="fb-dialog-close">Close</button>
+    </div>
+  </dialog>
 
   <!-- Add / edit question -->
   <dialog id="q-dialog">

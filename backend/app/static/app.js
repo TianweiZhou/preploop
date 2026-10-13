@@ -180,6 +180,7 @@ function renderList() {
           <span class="badge ${esc(q.type)}">${esc(q.type)}</span>
           ${confidenceDots(q.confidence)}
           <span class="spacer"></span>
+          ${q.answer || (q.star && Object.values(q.star).some(Boolean)) ? `<button class="link" data-action="feedback">Feedback</button>` : ""}
           <button class="link" data-action="edit">Edit</button>
           <button class="link danger" data-action="delete">Delete</button>
         </div>
@@ -200,6 +201,7 @@ $("#q-list").addEventListener("click", async (e) => {
   const id = button.closest(".card").dataset.id;
   const q = questions.find((x) => x.id === id);
   if (button.dataset.action === "edit") openForm(q);
+  if (button.dataset.action === "feedback") openFeedbackDialog(q);
   if (button.dataset.action === "delete" && confirm(`Delete this question?\n\n${q.question}`)) {
     try {
       await api(`/api/questions/${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -280,6 +282,56 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
+// ---- AI feedback ----
+
+const SCORE_LABELS = { clarity: "Clarity", structure: "Structure", specificity: "Specificity" };
+
+function listHtml(items) {
+  return items.length ? `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : `<p class="muted small">None.</p>`;
+}
+
+function feedbackHtml({ feedback: fb, model_id }) {
+  const scores = Object.entries(SCORE_LABELS).map(([key, label]) => {
+    const n = Number(fb.scores[key]) || 0;
+    return `<div class="score">
+      <span>${label}</span>
+      <span class="bar"><span style="width:${n * 20}%"></span></span>
+      <span class="small">${n}/5</span>
+    </div>`;
+  }).join("");
+  return `
+    <div class="scores">${scores}</div>
+    <h4>Strengths</h4>${listHtml(fb.strengths)}
+    <h4>Gaps</h4>${listHtml(fb.gaps)}
+    <h4>Suggested answer</h4><p class="answer">${esc(fb.suggested_answer)}</p>
+    <h4>Follow-up questions</h4>${listHtml(fb.follow_up_questions)}
+    <p class="model-label">Model: ${esc(model_id)}</p>`;
+}
+
+// Calls the API and fills `container`. Returns true on success.
+async function requestFeedback(body, container, button) {
+  container.hidden = false;
+  container.innerHTML = `<p class="muted">Getting feedback… this can take 10–20 seconds.</p>`;
+  if (button) button.disabled = true;
+  try {
+    container.innerHTML = feedbackHtml(await api("/api/feedback", { method: "POST", body }));
+    return true;
+  } catch (err) {
+    container.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+    return false;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function openFeedbackDialog(q) {
+  $("#fb-dialog-question").textContent = q.question;
+  $("#fb-dialog").showModal();
+  requestFeedback({ question_id: q.id }, $("#fb-dialog-body"));
+}
+
+$("#fb-dialog-close").addEventListener("click", () => $("#fb-dialog").close());
+
 // ---- Practice ----
 
 let current = null; // question being practiced
@@ -310,6 +362,10 @@ function renderPractice() {
   $("#p-answer-body").innerHTML = answerHtml(current);
   $("#p-answer").hidden = true;
   $("#p-reveal").hidden = false;
+  $("#p-feedback").hidden = true;
+  $("#p-typed").value = "";
+  $("#p-try").open = false;
+  $("#p-save-typed").hidden = true;
   $("#p-card").hidden = false;
   // Drop focus from the clicked button so Space doesn't re-click it.
   document.activeElement?.blur();
@@ -333,6 +389,38 @@ async function rate(confidence) {
     $("#p-status").textContent = err.message;
   }
 }
+
+$("#p-fb-saved").addEventListener("click", (e) => {
+  requestFeedback({ question_id: current.id }, $("#p-feedback"), e.currentTarget);
+});
+
+$("#p-fb-typed").addEventListener("click", async (e) => {
+  const answer = $("#p-typed").value.trim();
+  if (!answer) {
+    $("#p-feedback").hidden = false;
+    $("#p-feedback").innerHTML = `<p class="muted">Type an answer first.</p>`;
+    return;
+  }
+  const ok = await requestFeedback({ question_id: current.id, answer }, $("#p-feedback"), e.currentTarget);
+  $("#p-save-typed").hidden = !ok;
+});
+
+// Replace the saved answer with the typed one, keeping everything else.
+$("#p-save-typed").addEventListener("click", async () => {
+  const answer = $("#p-typed").value.trim();
+  if (!answer || !confirm("Replace your saved answer with this one?")) return;
+  try {
+    const { id, type, question, star, tags, confidence, notes } = current;
+    current = await api(`/api/questions/${encodeURIComponent(id)}`, {
+      method: "PUT", body: { type, question, answer, star, tags, confidence, notes },
+    });
+    $("#p-answer-body").innerHTML = answerHtml(current);
+    $("#p-save-typed").hidden = true;
+    libraryStale = true;
+  } catch (err) {
+    alert(err.message);
+  }
+});
 
 $("#p-start").addEventListener("click", () => {
   current = null;

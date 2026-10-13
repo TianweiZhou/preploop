@@ -114,6 +114,9 @@ Env vars used locally:
 | `ALLOWED_EMAIL` | The only Google account allowed in |
 | `JWT_SECRET` | Local session signing key. In AWS the key comes from SSM via `JWT_SECRET_PARAM` instead. |
 | `COOKIE_SECURE=false` | Local http only, so Safari keeps the cookie. Never set in AWS. |
+| `FEEDBACK_MODEL_ID` | Bedrock model or inference profile ID, e.g. `us.amazon.nova-lite-v1:0` |
+| `BEDROCK_REGION` | Region for Bedrock calls |
+| `AWS_PROFILE` | Optional. Needed only for real AI feedback locally. With `LOCAL_MOCK_DB=1`, only Bedrock calls go to AWS; the table stays in-memory. |
 
 Run tests (from `backend/`):
 

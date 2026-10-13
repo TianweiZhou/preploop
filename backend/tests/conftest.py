@@ -13,6 +13,8 @@ os.environ.update({
     "GOOGLE_CLIENT_ID": "test-client-id.apps.googleusercontent.com",
     "ALLOWED_EMAIL": "me@example.com",
     "JWT_SECRET": "test-secret-that-is-long-enough-for-hs256",
+    "FEEDBACK_MODEL_ID": "test-model-id",
+    "BEDROCK_REGION": "us-east-1",
 })
 
 from app import auth, db  # noqa: E402
