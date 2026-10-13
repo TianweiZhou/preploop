@@ -87,16 +87,33 @@ source .venv/bin/activate
 pip install -r backend/requirements-dev.txt
 ```
 
+Create your local settings (gitignored) and fill in the placeholders:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Sign-in needs a Google OAuth Client ID even locally (see "Google Cloud setup" below). For local dev, add **both** `http://localhost` and `http://localhost:8000` as Authorized JavaScript origins.
+
 Run the app (from `backend/`):
 
 ```bash
 cd backend
-LOCAL_MOCK_DB=1 uvicorn app.main:app --reload --port 8000
+set -a; source .env; set +a
+uvicorn app.main:app --reload --port 8000
 ```
 
 Open http://localhost:8000 (port 8000 matches the Google OAuth origin). Health check: http://localhost:8000/api/health
 
-`LOCAL_MOCK_DB=1` runs an in-memory DynamoDB (moto), so you don't need AWS for local work. Data is wiped on every restart or reload. To use the real deployed table instead, drop that flag and set `TABLE_NAME` and your AWS profile/region.
+Env vars used locally:
+
+| Var | What it does |
+|---|---|
+| `LOCAL_MOCK_DB=1` | In-memory DynamoDB (moto), no AWS needed. Data is wiped on every restart or reload. To use the real table instead, remove it and set `TABLE_NAME` plus your AWS profile/region. |
+| `GOOGLE_CLIENT_ID` | OAuth Client ID (public) |
+| `ALLOWED_EMAIL` | The only Google account allowed in |
+| `JWT_SECRET` | Local session signing key. In AWS the key comes from SSM via `JWT_SECRET_PARAM` instead. |
+| `COOKIE_SECURE=false` | Local http only, so Safari keeps the cookie. Never set in AWS. |
 
 Run tests (from `backend/`):
 

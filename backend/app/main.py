@@ -3,12 +3,12 @@
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from mangum import Mangum
 
-from app import db
+from app import auth, db
 from app.routes import questions
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -25,7 +25,10 @@ if os.environ.get("LOCAL_MOCK_DB") == "1":
 
 # No docs UI in production, this is a private app.
 app = FastAPI(title="PrepLoop", docs_url=None, redoc_url=None, openapi_url=None)
-app.include_router(questions.router)
+app.include_router(auth.router)
+# Everything below needs a valid session cookie.
+protected = [Depends(auth.require_user)]
+app.include_router(questions.router, dependencies=protected)
 
 
 @app.get("/api/health")

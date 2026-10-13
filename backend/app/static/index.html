@@ -3,10 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>PrepLoop</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <h1>PrepLoop</h1>
-  <p>Coming soon.</p>
+  <!-- Shown until we know whether there's a session. -->
+  <main id="loading" class="center"><p class="muted">Loading…</p></main>
+
+  <main id="login" class="center" hidden>
+    <h1>PrepLoop</h1>
+    <p class="muted">Practice your interview answers.</p>
+    <div id="google-button"></div>
+    <p id="login-error" class="error" hidden></p>
+  </main>
+
+  <div id="app" hidden>
+    <header class="topbar">
+      <strong>PrepLoop</strong>
+      <span class="spacer"></span>
+      <span id="user-email" class="muted small"></span>
+      <button id="logout" class="link">Sign out</button>
+    </header>
+    <main class="content">
+      <p class="muted">Signed in. The library comes in the next step.</p>
+    </main>
+  </div>
 </body>
 </html>
