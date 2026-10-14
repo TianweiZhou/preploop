@@ -6,8 +6,6 @@ A small personal web app to store interview questions with my own answers, pract
 
 Live at: `https://prep.joemakes.ca` (domain registered on Namecheap)
 
-> **Note for Claude Code:** This README is the spec. Build the whole project from it. Keep things simple, avoid over-engineering, and prefer fewer files and fewer dependencies. Ask me before adding anything not described here. After building, walk me through the deploy steps.
-
 ---
 
 ---
